@@ -1,6 +1,6 @@
 package com.trafficsigndetector.trainingorchestratorservice.messaging;
 
-import com.trafficsigndetector.trainingorchestratorservice.model.MauHL;
+import com.trafficsigndetector.sharedmodel.MauHL;
 
 import java.time.Instant;
 import java.util.List;

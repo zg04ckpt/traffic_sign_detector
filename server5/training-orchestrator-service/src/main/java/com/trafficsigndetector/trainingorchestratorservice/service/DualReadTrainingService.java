@@ -1,9 +1,9 @@
 package com.trafficsigndetector.trainingorchestratorservice.service;
 
 import com.trafficsigndetector.trainingorchestratorservice.persistence.entity.ThongTinHLEntity;
-import com.trafficsigndetector.trainingorchestratorservice.persistence.repository.ThongTinHLRepository;
+import com.trafficsigndetector.trainingorchestratorservice.persistence.jdbc.TrainingSessionJdbcRepository;
+import com.trafficsigndetector.trainingorchestratorservice.persistence.jdbc.TrainingSessionSqliteJdbcRepository;
 import com.trafficsigndetector.trainingorchestratorservice.persistence.sqlite.TrainingSessionSqliteEntity;
-import com.trafficsigndetector.trainingorchestratorservice.persistence.sqlite.TrainingSessionSqliteRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -21,8 +21,8 @@ import java.util.Optional;
 @Slf4j
 public class DualReadTrainingService {
 
-    private final ThongTinHLRepository postgresRepository;
-    private final TrainingSessionSqliteRepository sqliteRepository;
+    private final TrainingSessionJdbcRepository trainingSessionJdbcRepository;
+    private final TrainingSessionSqliteJdbcRepository trainingSessionSqliteJdbcRepository;
 
     @Value("${app.migration.sqlite-enabled:false}")
     private boolean sqliteEnabled;
@@ -34,10 +34,10 @@ public class DualReadTrainingService {
     private boolean dualWriteEnabled;
 
     public DualReadTrainingService(
-            ThongTinHLRepository postgresRepository,
-            TrainingSessionSqliteRepository sqliteRepository) {
-        this.postgresRepository = postgresRepository;
-        this.sqliteRepository = sqliteRepository;
+            TrainingSessionJdbcRepository trainingSessionJdbcRepository,
+            TrainingSessionSqliteJdbcRepository trainingSessionSqliteJdbcRepository) {
+        this.trainingSessionJdbcRepository = trainingSessionJdbcRepository;
+        this.trainingSessionSqliteJdbcRepository = trainingSessionSqliteJdbcRepository;
     }
 
     /**
@@ -47,7 +47,7 @@ public class DualReadTrainingService {
      */
     public Optional<ThongTinHLEntity> findByIdDualRead(int id) {
         if (!sqliteEnabled) {
-            return postgresRepository.findById(id);
+            return trainingSessionJdbcRepository.findById(id);
         }
 
         // Phase 4: Primary is SQLite
@@ -56,7 +56,7 @@ public class DualReadTrainingService {
         }
 
         // Phase 1-3: Primary is PostgreSQL
-        Optional<ThongTinHLEntity> psql = postgresRepository.findById(id);
+        Optional<ThongTinHLEntity> psql = trainingSessionJdbcRepository.findById(id);
 
         // If dual-write enable (Phase 2-3), validate SQLite for mismatch
         if (dualWriteEnabled) {
@@ -75,7 +75,7 @@ public class DualReadTrainingService {
      */
     private Optional<ThongTinHLEntity> findFromSqliteWithFallback(int id) {
         try {
-            Optional<TrainingSessionSqliteEntity> sqlite = sqliteRepository.findById(id);
+            Optional<TrainingSessionSqliteEntity> sqlite = trainingSessionSqliteJdbcRepository.findById(id);
             if (sqlite.isPresent()) {
                 // Convert SQLite entity to PostgreSQL entity (lazy mapping)
                 return Optional.of(convertFromSqlite(sqlite.get()));
@@ -85,15 +85,15 @@ public class DualReadTrainingService {
         }
 
         // Fallback
-        return postgresRepository.findById(id);
+        return trainingSessionJdbcRepository.findById(id);
     }
 
     /**
      * Validate SQLite cache consistency during Phase 2-3
      */
     private void validateSqliteCache(int id) {
-        Optional<TrainingSessionSqliteEntity> sqlite = sqliteRepository.findById(id);
-        Optional<ThongTinHLEntity> psql = postgresRepository.findById(id);
+        Optional<TrainingSessionSqliteEntity> sqlite = trainingSessionSqliteJdbcRepository.findById(id);
+        Optional<ThongTinHLEntity> psql = trainingSessionJdbcRepository.findById(id);
 
         if (sqlite.isPresent() && psql.isPresent()) {
             TrainingSessionSqliteEntity s = sqlite.get();
@@ -121,13 +121,13 @@ public class DualReadTrainingService {
         entity.setId(sqlite.getId());
         entity.setTrackingId(sqlite.getTrackingId());
         entity.setTrangThai(sqlite.getTrangThai());
-        entity.setEpochs(sqlite.getEpochs());
-        entity.setBatchSize(sqlite.getBatchSize());
-        entity.setLearningRate(sqlite.getLearningRate());
-        entity.setKichThuocAnh(sqlite.getKichThuocAnh());
-        entity.setLoaiThietBi(sqlite.getLoaiThietBi());
-        entity.setEarlyStoppingPatience(sqlite.getEarlyStoppingPatience());
-        entity.setOptimizer(sqlite.getOptimizer());
+        entity.setEpochs(sqlite.getEpochs() != null ? sqlite.getEpochs() : 0);
+        entity.setBatchSize(sqlite.getBatchSize() != null ? sqlite.getBatchSize() : 0);
+        entity.setLearningRate(sqlite.getLearningRate() != null ? sqlite.getLearningRate() : 0.01);
+        entity.setKichThuocAnh(sqlite.getKichThuocAnh() != null ? sqlite.getKichThuocAnh() : 416);
+        entity.setLoaiThietBi(sqlite.getLoaiThietBi() != null ? sqlite.getLoaiThietBi() : "cpu");
+        entity.setEarlyStoppingPatience(sqlite.getEarlyStoppingPatience() != null ? sqlite.getEarlyStoppingPatience() : 5);
+        entity.setOptimizer(sqlite.getOptimizer() != null ? sqlite.getOptimizer() : "Adam");
         entity.setCurrentEpoch(sqlite.getCurrentEpoch());
         entity.setDoChinhXac(sqlite.getDoChinhXac());
         entity.setDoNhay(sqlite.getDoNhay());

@@ -6,9 +6,6 @@ spring:
         url: jdbc:postgresql://postgres:5432/training_db
         username: server5
         password: server5pass
-    jpa:
-        hibernate:
-            ddl-auto: none
     flyway:
         enabled: true
         connect-retries: 30

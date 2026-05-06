@@ -13,9 +13,6 @@ spring:
     url: jdbc:postgresql://postgres:5432/dataset_db
     username: server5
     password: server5pass
-  jpa:
-    hibernate:
-      ddl-auto: none
   flyway:
     enabled: true
 

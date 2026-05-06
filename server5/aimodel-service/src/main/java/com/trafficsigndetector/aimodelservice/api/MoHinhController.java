@@ -1,9 +1,9 @@
 package com.trafficsigndetector.aimodelservice.api;
 
 import com.trafficsigndetector.aimodelservice.model.CreateVersionRequest;
-import com.trafficsigndetector.aimodelservice.model.MoHinh;
-import com.trafficsigndetector.aimodelservice.model.PhienBan;
 import com.trafficsigndetector.aimodelservice.service.ModelCatalogService;
+import com.trafficsigndetector.sharedmodel.MoHinh;
+import com.trafficsigndetector.sharedmodel.PhienBan;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.GetMapping;

@@ -3,21 +3,20 @@ package com.trafficsigndetector.trainingorchestratorservice.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.trafficsigndetector.sharedmodel.Mau;
+import com.trafficsigndetector.sharedmodel.MauHL;
+import com.trafficsigndetector.sharedmodel.MoHinh;
+import com.trafficsigndetector.sharedmodel.PhienBan;
+import com.trafficsigndetector.sharedmodel.ThongTinHL;
 import com.trafficsigndetector.trainingorchestratorservice.messaging.TrainingJobMessage;
 import com.trafficsigndetector.trainingorchestratorservice.messaging.TrainingJobPublisher;
 import com.trafficsigndetector.trainingorchestratorservice.messaging.TrainingStatusMessage;
 import com.trafficsigndetector.trainingorchestratorservice.messaging.TrainingStatusTracker;
-import com.trafficsigndetector.trainingorchestratorservice.model.MauHL;
-import com.trafficsigndetector.trainingorchestratorservice.model.Mau;
-import com.trafficsigndetector.trainingorchestratorservice.model.MoHinh;
-import com.trafficsigndetector.trainingorchestratorservice.model.PhienBan;
-import com.trafficsigndetector.trainingorchestratorservice.model.ThongTinHL;
-import com.trafficsigndetector.trainingorchestratorservice.persistence.entity.MauHLEntity;
 import com.trafficsigndetector.trainingorchestratorservice.persistence.entity.ThongTinHLEntity;
 import com.trafficsigndetector.trainingorchestratorservice.persistence.entity.TrainingStatusEventEntity;
-import com.trafficsigndetector.trainingorchestratorservice.persistence.repository.MauHLRepository;
-import com.trafficsigndetector.trainingorchestratorservice.persistence.repository.ThongTinHLRepository;
-import com.trafficsigndetector.trainingorchestratorservice.persistence.repository.TrainingStatusEventRepository;
+import com.trafficsigndetector.trainingorchestratorservice.persistence.jdbc.MauHLJdbcRepository;
+import com.trafficsigndetector.trainingorchestratorservice.persistence.jdbc.TrainingSessionJdbcRepository;
+import com.trafficsigndetector.trainingorchestratorservice.persistence.jdbc.TrainingStatusEventJdbcRepository;
 import com.trafficsigndetector.trainingorchestratorservice.service.state.TrainingLifecycleState;
 import com.trafficsigndetector.trainingorchestratorservice.service.state.TrainingSessionStateMachine;
 import com.trafficsigndetector.trainingorchestratorservice.service.strategy.TrainingJobBuildStrategy;
@@ -50,9 +49,9 @@ public class TrainingSessionService {
 
     private final TrainingJobPublisher trainingJobPublisher;
     private final TrainingStatusTracker trainingStatusTracker;
-    private final ThongTinHLRepository thongTinHLRepository;
-    private final MauHLRepository mauHLRepository;
-    private final TrainingStatusEventRepository trainingStatusEventRepository;
+    private final TrainingSessionJdbcRepository trainingSessionJdbcRepository;
+    private final MauHLJdbcRepository mauHLJdbcRepository;
+    private final TrainingStatusEventJdbcRepository trainingStatusEventJdbcRepository;
     private final TrainingSessionStateMachine trainingSessionStateMachine;
     private final List<TrainingJobBuildStrategy> trainingJobBuildStrategies;
     private final ObjectMapper objectMapper;
@@ -68,9 +67,9 @@ public class TrainingSessionService {
     public TrainingSessionService(
             TrainingJobPublisher trainingJobPublisher,
             TrainingStatusTracker trainingStatusTracker,
-            ThongTinHLRepository thongTinHLRepository,
-            MauHLRepository mauHLRepository,
-            TrainingStatusEventRepository trainingStatusEventRepository,
+            TrainingSessionJdbcRepository trainingSessionJdbcRepository,
+            MauHLJdbcRepository mauHLJdbcRepository,
+            TrainingStatusEventJdbcRepository trainingStatusEventJdbcRepository,
             TrainingSessionStateMachine trainingSessionStateMachine,
             List<TrainingJobBuildStrategy> trainingJobBuildStrategies,
             ObjectMapper objectMapper,
@@ -84,9 +83,9 @@ public class TrainingSessionService {
     ) {
         this.trainingJobPublisher = trainingJobPublisher;
         this.trainingStatusTracker = trainingStatusTracker;
-        this.thongTinHLRepository = thongTinHLRepository;
-        this.mauHLRepository = mauHLRepository;
-        this.trainingStatusEventRepository = trainingStatusEventRepository;
+        this.trainingSessionJdbcRepository = trainingSessionJdbcRepository;
+        this.mauHLJdbcRepository = mauHLJdbcRepository;
+        this.trainingStatusEventJdbcRepository = trainingStatusEventJdbcRepository;
         this.trainingSessionStateMachine = trainingSessionStateMachine;
         this.trainingJobBuildStrategies = trainingJobBuildStrategies;
         this.objectMapper = objectMapper;
@@ -128,10 +127,10 @@ public class TrainingSessionService {
         // Persist once with a temporary non-null tracking id to satisfy DB constraints,
         // then rewrite it to id-based tracking id for client compatibility.
         session.setTrackingId("pending-" + UUID.randomUUID());
-        session = thongTinHLRepository.save(session);
+        session = trainingSessionJdbcRepository.save(session);
         replaceMauHL(session, dsMauHL);
         session.setTrackingId(String.valueOf(session.getId()));
-        session = thongTinHLRepository.save(session);
+        session = trainingSessionJdbcRepository.save(session);
 
         return toResponse(session);
     }
@@ -145,7 +144,7 @@ public class TrainingSessionService {
         enforceAdmissionCapacity();
 
         session.setTrangThai(TrainingLifecycleState.QUEUED.code());
-        thongTinHLRepository.save(session);
+        trainingSessionJdbcRepository.save(session);
 
         TrainingStatusMessage queued = new TrainingStatusMessage(
                 session.getTrackingId(),
@@ -158,7 +157,7 @@ public class TrainingSessionService {
 
         MoHinh moHinh = readJsonModel(session.getMoHinhHLJson());
         PhienBan phienBan = readJsonVersion(session.getPhienBanHLJson());
-        List<MauHL> dsMau = readDsMau(session);
+        List<MauHL> dsMau = readDsMauAsMauHL(session);
         if (dsMau.isEmpty()) {
             throw new IllegalStateException("Training session has no samples. Recreate the session with selected samples.");
         }
@@ -175,8 +174,8 @@ public class TrainingSessionService {
     }
 
     private void enforceAdmissionCapacity() {
-        long running = thongTinHLRepository.countByTrangThaiIn(List.of("RUNNING", "PREPARING_DATASET"));
-        long queued = thongTinHLRepository.countByTrangThai("QUEUED");
+        long running = trainingSessionJdbcRepository.countByTrangThaiIn(List.of("RUNNING", "PREPARING_DATASET"));
+        long queued = trainingSessionJdbcRepository.countByTrangThai("QUEUED");
 
         if (running > maxConcurrentTraining) {
             throw new QueueCapacityExceededException("Training workers are saturated. Please try again later.");
@@ -238,7 +237,7 @@ public class TrainingSessionService {
 
         session.setPhienBanHLJson(writeJson(created));
         session.setDuongDanMoHinhKetQua(modelPublicPath);
-        thongTinHLRepository.save(session);
+        trainingSessionJdbcRepository.save(session);
 
         return created.id();
     }
@@ -249,7 +248,7 @@ public class TrainingSessionService {
             return;
         }
 
-        Optional<ThongTinHLEntity> sessionOptional = thongTinHLRepository.findByTrackingId(message.trackingId());
+        Optional<ThongTinHLEntity> sessionOptional = trainingSessionJdbcRepository.findByTrackingId(message.trackingId());
         if (sessionOptional.isEmpty()) {
             return;
         }
@@ -270,19 +269,19 @@ public class TrainingSessionService {
 
         trainingSessionStateMachine.apply(session, message);
 
-        thongTinHLRepository.save(session);
+        trainingSessionJdbcRepository.save(session);
         appendStatusEvent(session, message);
     }
 
     @Transactional(readOnly = true)
     public Optional<TrainingStatusMessage> getLatestStatus(String trackingId) {
-        return trainingStatusEventRepository.findTopByTrackingIdOrderByUpdatedAtDescIdDesc(trackingId)
+        return trainingStatusEventJdbcRepository.findTopByTrackingIdOrderByUpdatedAtDescIdDesc(trackingId)
                 .map(this::toStatusMessage);
     }
 
     @Transactional(readOnly = true)
     public List<TrainingStatusMessage> getTimeline(String trackingId) {
-        List<TrainingStatusEventEntity> events = trainingStatusEventRepository.findByTrackingIdOrderByUpdatedAtAscIdAsc(trackingId);
+        List<TrainingStatusEventEntity> events = trainingStatusEventJdbcRepository.findByTrackingIdOrderByUpdatedAtAscIdAsc(trackingId);
         List<TrainingStatusMessage> result = new ArrayList<>();
         for (TrainingStatusEventEntity event : events) {
             result.add(toStatusMessage(event));
@@ -291,7 +290,7 @@ public class TrainingSessionService {
     }
 
     private ThongTinHLEntity requireSession(int id) {
-        return thongTinHLRepository.findById(id)
+        return trainingSessionJdbcRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Training session not found: " + id));
     }
 
@@ -308,7 +307,7 @@ public class TrainingSessionService {
         event.setLogLine(message.logLine());
         event.setModelArtifactPath(message.modelArtifactPath());
         event.setCreatedAt(Instant.now());
-        trainingStatusEventRepository.save(event);
+        trainingStatusEventJdbcRepository.save(event);
     }
 
     private TrainingStatusMessage toStatusMessage(TrainingStatusEventEntity event) {
@@ -325,71 +324,135 @@ public class TrainingSessionService {
         );
     }
 
-    private Map<String, Object> toResponse(ThongTinHLEntity session) {
-        Map<String, Object> res = new LinkedHashMap<>();
-        res.put("Id", session.getId());
-        res.put("TrackingId", session.getTrackingId());
-        res.put("Epochs", session.getEpochs());
-        res.put("BatchSize", session.getBatchSize());
-        res.put("TrangThai", session.getTrangThai());
-        res.put("BatDauLuc", session.getBatDauLuc());
-        res.put("KetThucLuc", session.getKetThucLuc());
-        res.put("DoChinhXac", session.getDoChinhXac() == null ? 0.0 : session.getDoChinhXac());
-        res.put("DoNhay", session.getDoNhay() == null ? 0.0 : session.getDoNhay());
-        res.put("CurrentEpoch", session.getCurrentEpoch());
-        res.put("LearningRate", session.getLearningRate());
-        res.put("KichThuocAnh", session.getKichThuocAnh());
-        res.put("LoaiThietBi", session.getLoaiThietBi());
-        res.put("EarlyStoppingPatience", session.getEarlyStoppingPatience());
-        res.put("Optimizer", session.getOptimizer());
-        res.put("PhienBanHL", readJsonMap(session.getPhienBanHLJson()));
-        res.put("MoHinhHL", readJsonMap(session.getMoHinhHLJson()));
-        res.put("DsMauHL", readDsMau(session));
-        res.put("DuongDanMoHinhKetQua", session.getDuongDanMoHinhKetQua());
-        return res;
+    private ThongTinHL toResponse(ThongTinHLEntity session) {
+        MoHinh mo = readJsonModel(session.getMoHinhHLJson());
+        PhienBan pb = readJsonVersion(session.getPhienBanHLJson());
+        List<MauHL> ds = readDsMauAsMauHL(session);
+        return new ThongTinHL(
+                session.getId(),
+                session.getTrackingId(),
+                session.getEpochs(),
+                session.getBatchSize(),
+                session.getTrangThai(),
+                session.getBatDauLuc(),
+                session.getKetThucLuc(),
+                session.getDoChinhXac() == null ? 0.0 : session.getDoChinhXac(),
+                session.getDoNhay() == null ? 0.0 : session.getDoNhay(),
+                session.getCurrentEpoch(),
+                session.getLearningRate(),
+                session.getKichThuocAnh(),
+                session.getLoaiThietBi(),
+                session.getEarlyStoppingPatience(),
+                session.getOptimizer(),
+                mo,
+                pb,
+                ds,
+                session.getDuongDanMoHinhKetQua()
+        );
     }
 
-    private void replaceMauHL(ThongTinHLEntity session, List<Map<String, Object>> dsMauHL) {
-        mauHLRepository.deleteByThongTinHLId(session.getId());
-        List<MauHLEntity> rows = new ArrayList<>();
-        for (Map<String, Object> mau : dsMauHL) {
-            MauHLEntity row = new MauHLEntity();
-            row.setThongTinHL(session);
-            row.setThongTinMauJson(writeJson(mau));
-            rows.add(row);
+    private void replaceMauHL(ThongTinHLEntity session, List<MauHL> samples) {
+        mauHLJdbcRepository.deleteByThongTinHLId(session.getId());
+        List<String> jsonLines = new ArrayList<>();
+        for (MauHL m : samples) {
+            jsonLines.add(writeJson(m));
         }
-        if (!rows.isEmpty()) {
-            mauHLRepository.saveAll(rows);
-        }
+        mauHLJdbcRepository.insertRows(session.getId(), jsonLines);
     }
 
-    private List<Map<String, Object>> readDsMau(ThongTinHLEntity session) {
-        List<MauHLEntity> rows = mauHLRepository.findByThongTinHLIdOrderByIdAsc(session.getId());
+    private List<MauHL> readDsMauAsMauHL(ThongTinHLEntity session) {
+        List<String> rows = mauHLJdbcRepository.findThongTinMauJsonOrdered(session.getId());
         if (!rows.isEmpty()) {
-            List<Map<String, Object>> result = new ArrayList<>();
-            for (MauHLEntity row : rows) {
-                result.add(readJsonMap(row.getThongTinMauJson()));
+            List<MauHL> result = new ArrayList<>();
+            for (String json : rows) {
+                try {
+                    result.add(objectMapper.readValue(json, MauHL.class));
+                } catch (JsonProcessingException ex) {
+                    throw new IllegalStateException("Invalid MauHL JSON row", ex);
+                }
             }
             return result;
         }
-        return readJsonListMap(session.getDsMauHLJson());
+        try {
+            if (session.getDsMauHLJson() != null && !session.getDsMauHLJson().isBlank()) {
+                return objectMapper.readValue(session.getDsMauHLJson(), MAU_HL_LIST_TYPE);
+            }
+        } catch (JsonProcessingException ex) {
+            return List.of();
+        }
+        return List.of();
     }
 
-    private Map<String, Object> defaultModel() {
-        Map<String, Object> model = new LinkedHashMap<>();
-        model.put("Id", 1);
-        model.put("Ten", "TrafficSign-YOLO");
-        model.put("MoHinhGoc", "yolov8s.pt");
-        return model;
+    private MoHinh normalizeModel(MoHinh raw) {
+        if (raw == null) {
+            return new MoHinh(1, "TrafficSign-YOLO", "yolov8s.pt", List.of());
+        }
+        Integer id = raw.id() != null ? raw.id() : 1;
+        String ten = raw.ten() != null && !raw.ten().isBlank() ? raw.ten() : "TrafficSign-YOLO";
+        String goc = raw.moHinhGoc() != null ? raw.moHinhGoc() : "yolov8s.pt";
+        return new MoHinh(id, ten, goc, raw.dsPhienBan());
     }
 
-    private Map<String, Object> defaultVersion() {
-        Map<String, Object> version = new LinkedHashMap<>();
-        version.put("Id", 101);
-        version.put("Ten", "v1.0");
-        version.put("MoTa", "Default version");
-        version.put("DuongDanMH", "/models/yolov8s.pt");
-        return version;
+    private PhienBan normalizeVersion(PhienBan raw) {
+        if (raw == null) {
+            return new PhienBan(101, "v1.0", "Default version", "/models/yolov8s.pt");
+        }
+        Integer id = raw.id() != null ? raw.id() : 101;
+        String ten = raw.ten() != null && !raw.ten().isBlank() ? raw.ten() : "v1.0";
+        String moTa = raw.moTa() != null ? raw.moTa() : "Default version";
+        String path = raw.duongDanMH() != null ? raw.duongDanMH() : "/models/yolov8s.pt";
+        return new PhienBan(id, ten, moTa, path);
+    }
+
+    private List<MauHL> normalizeSamples(List<MauHL> raw) {
+        if (raw == null) {
+            return List.of();
+        }
+        List<MauHL> out = new ArrayList<>();
+        for (MauHL item : raw) {
+            if (item != null) {
+                out.add(item);
+            }
+        }
+        return out;
+    }
+
+    private MoHinh readJsonModel(String json) {
+        if (json == null || json.isBlank()) {
+            return normalizeModel(null);
+        }
+        try {
+            return normalizeModel(objectMapper.readValue(json, MoHinh.class));
+        } catch (JsonProcessingException ex) {
+            return normalizeModel(null);
+        }
+    }
+
+    private PhienBan readJsonVersion(String json) {
+        if (json == null || json.isBlank()) {
+            return normalizeVersion(null);
+        }
+        try {
+            return normalizeVersion(objectMapper.readValue(json, PhienBan.class));
+        } catch (JsonProcessingException ex) {
+            return normalizeVersion(null);
+        }
+    }
+
+    private int readInt(Integer raw, int fallback) {
+        return raw == null ? fallback : raw;
+    }
+
+    private double readDouble(Double raw, double fallback) {
+        return raw == null ? fallback : raw;
+    }
+
+    private String readString(String raw, String fallback) {
+        if (raw == null) {
+            return fallback;
+        }
+        String t = raw.trim();
+        return t.isEmpty() ? fallback : t;
     }
 
     private boolean isActiveStatus(String rawState) {
@@ -410,128 +473,11 @@ public class TrainingSessionService {
         throw new IllegalStateException("No TrainingJobBuildStrategy supports this training session");
     }
 
-    private int readInt(Map<String, Object> source, String key, int fallback) {
-        Object value = readObject(source, key);
-        if (value instanceof Number number) {
-            return number.intValue();
-        }
-        if (value == null) {
-            return fallback;
-        }
-        try {
-            return Integer.parseInt(String.valueOf(value));
-        } catch (NumberFormatException ex) {
-            return fallback;
-        }
-    }
-
-    private double readDouble(Map<String, Object> source, String key, double fallback) {
-        Object value = readObject(source, key);
-        if (value instanceof Number number) {
-            return number.doubleValue();
-        }
-        if (value == null) {
-            return fallback;
-        }
-        try {
-            return Double.parseDouble(String.valueOf(value));
-        } catch (NumberFormatException ex) {
-            return fallback;
-        }
-    }
-
-    private String readString(Map<String, Object> source, String key, String fallback) {
-        Object value = readObject(source, key);
-        if (value == null) {
-            return fallback;
-        }
-        String text = String.valueOf(value).trim();
-        return text.isEmpty() ? fallback : text;
-    }
-
-    private Map<String, Object> readMap(Map<String, Object> source, String key) {
-        Object value = readObject(source, key);
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> normalized = new LinkedHashMap<>();
-            for (Map.Entry<?, ?> entry : map.entrySet()) {
-                normalized.put(String.valueOf(entry.getKey()), entry.getValue());
-            }
-            return normalized;
-        }
-        return Map.of();
-    }
-
-    private List<?> readList(Map<String, Object> source, String key) {
-        Object value = readObject(source, key);
-        if (value instanceof List<?> list) {
-            return list;
-        }
-        return List.of();
-    }
-
-    private Object readObject(Map<String, Object> source, String key) {
-        if (source.containsKey(key)) {
-            return source.get(key);
-        }
-        for (Map.Entry<String, Object> entry : source.entrySet()) {
-            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(key)) {
-                return entry.getValue();
-            }
-        }
-        return null;
-    }
-
-    private Map<String, Object> cloneMap(Map<String, Object> source) {
-        if (source == null || source.isEmpty()) {
-            return new LinkedHashMap<>();
-        }
-        return new LinkedHashMap<>(source);
-    }
-
-    private List<Map<String, Object>> cloneListOfMap(List<?> source) {
-        if (source == null || source.isEmpty()) {
-            return new ArrayList<>();
-        }
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Object item : source) {
-            if (item instanceof Map<?, ?> map) {
-                Map<String, Object> normalized = new LinkedHashMap<>();
-                for (Map.Entry<?, ?> entry : map.entrySet()) {
-                    normalized.put(String.valueOf(entry.getKey()), entry.getValue());
-                }
-                result.add(normalized);
-            }
-        }
-        return result;
-    }
-
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Could not serialize training payload", ex);
-        }
-    }
-
-    private Map<String, Object> readJsonMap(String json) {
-        if (json == null || json.isBlank()) {
-            return new LinkedHashMap<>();
-        }
-        try {
-            return objectMapper.readValue(json, MAP_TYPE);
-        } catch (JsonProcessingException ex) {
-            return new LinkedHashMap<>();
-        }
-    }
-
-    private List<Map<String, Object>> readJsonListMap(String json) {
-        if (json == null || json.isBlank()) {
-            return new ArrayList<>();
-        }
-        try {
-            return objectMapper.readValue(json, LIST_MAP_TYPE);
-        } catch (JsonProcessingException ex) {
-            return new ArrayList<>();
         }
     }
 

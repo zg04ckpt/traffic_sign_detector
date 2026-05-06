@@ -1,15 +1,9 @@
 package com.trafficsigndetector.datasetservice.service;
 
-import com.trafficsigndetector.datasetservice.entity.KhungNhanDangEntity;
-import com.trafficsigndetector.datasetservice.entity.LoaiBienEntity;
-import com.trafficsigndetector.datasetservice.entity.MauEntity;
-import com.trafficsigndetector.datasetservice.entity.TapDuLieuEntity;
-import com.trafficsigndetector.datasetservice.model.KhungNhanDang;
-import com.trafficsigndetector.datasetservice.model.LoaiBien;
-import com.trafficsigndetector.datasetservice.model.Mau;
-import com.trafficsigndetector.datasetservice.model.TapDuLieu;
-import com.trafficsigndetector.datasetservice.repository.LoaiBienRepository;
-import com.trafficsigndetector.datasetservice.repository.TapDuLieuRepository;
+import com.trafficsigndetector.datasetservice.repository.DatasetJdbcRepository;
+import com.trafficsigndetector.sharedmodel.LoaiBien;
+import com.trafficsigndetector.sharedmodel.Mau;
+import com.trafficsigndetector.sharedmodel.TapDuLieu;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,7 +22,6 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -39,17 +32,14 @@ public class DatasetCatalogService {
 
     private static final Logger log = LoggerFactory.getLogger(DatasetCatalogService.class);
 
-    private final TapDuLieuRepository tapDuLieuRepository;
-    private final LoaiBienRepository loaiBienRepository;
+    private final DatasetJdbcRepository datasetRepository;
     private final Path uploadRoot;
 
     public DatasetCatalogService(
-            TapDuLieuRepository tapDuLieuRepository,
-            LoaiBienRepository loaiBienRepository,
+            DatasetJdbcRepository datasetRepository,
             @Value("${app.storage.upload-dir:dataset-service/uploads}") String uploadDir
     ) {
-        this.tapDuLieuRepository = tapDuLieuRepository;
-        this.loaiBienRepository = loaiBienRepository;
+        this.datasetRepository = datasetRepository;
         this.uploadRoot = Paths.get(uploadDir).toAbsolutePath().normalize();
         initStorage();
     }
@@ -68,18 +58,19 @@ public class DatasetCatalogService {
 
         log.info("Creating dataset '{}' with {} images and {} label files", datasetName, images.size(), normalizeFiles(labelFiles).size());
 
-        TapDuLieuEntity dataset = new TapDuLieuEntity();
-        dataset.setTen(datasetName);
-        dataset = tapDuLieuRepository.save(dataset);
+        int datasetId = datasetRepository.insertTapDuLieu(datasetName);
 
         try {
-            addUploadedSamples(dataset, images, normalizeFiles(labelFiles));
-            TapDuLieuEntity saved = tapDuLieuRepository.save(dataset);
-            log.info("Created dataset id={} name='{}' samples={}", saved.getId(), saved.getTen(), saved.getDsMau().size());
-            return toDatasetResponse(saved);
+            addUploadedSamples(datasetId, images, normalizeFiles(labelFiles));
+            TapDuLieu saved = datasetRepository.findFullById(datasetId)
+                    .orElseThrow(() -> new IllegalStateException("Dataset not found after create: " + datasetId));
+            log.info("Created dataset id={} name='{}' samples={}", saved.id(), saved.ten(),
+                    saved.dsMau() == null ? 0 : saved.dsMau().size());
+            return saved;
         } catch (RuntimeException ex) {
-            log.error("Create dataset failed for id={} name='{}'", dataset.getId(), datasetName, ex);
-            cleanupDatasetFolder(dataset.getId());
+            log.error("Create dataset failed for id={} name='{}'", datasetId, datasetName, ex);
+            cleanupDatasetFolder(datasetId);
+            datasetRepository.deleteTapDuLieu(datasetId);
             throw ex;
         }
     }
@@ -92,39 +83,34 @@ public class DatasetCatalogService {
             List<MultipartFile> labelFiles,
             List<Integer> removeSampleIds
     ) {
-        TapDuLieuEntity dataset = requireDataset(datasetId);
+        TapDuLieu current = requireDataset(datasetId);
 
         if (tenDataset != null && !tenDataset.isBlank()) {
-            dataset.setTen(normalizeDatasetName(tenDataset));
+            datasetRepository.updateTapDuLieuTen(datasetId, normalizeDatasetName(tenDataset));
         }
 
-        removeSamples(dataset, removeSampleIds);
-        addUploadedSamples(dataset, normalizeFiles(addImages), normalizeFiles(labelFiles));
+        removeSamples(datasetId, current, removeSampleIds);
+        addUploadedSamples(datasetId, normalizeFiles(addImages), normalizeFiles(labelFiles));
 
-        TapDuLieuEntity saved = tapDuLieuRepository.save(dataset);
-        return toDatasetResponse(saved);
+        return datasetRepository.findFullById(datasetId)
+                .orElseThrow(() -> new IllegalStateException("Dataset not found: " + datasetId));
     }
 
     @Transactional
     public void deleteDataset(int datasetId) {
-        TapDuLieuEntity dataset = requireDataset(datasetId);
-        cleanupDatasetFolder(dataset.getId());
-        tapDuLieuRepository.delete(dataset);
+        requireDataset(datasetId);
+        cleanupDatasetFolder(datasetId);
+        datasetRepository.deleteTapDuLieu(datasetId);
     }
 
     @Transactional(readOnly = true)
     public List<TapDuLieu> getAllDatasets() {
-        List<TapDuLieuEntity> datasets = tapDuLieuRepository.findAllByOrderByIdAsc();
-        List<TapDuLieu> list = new ArrayList<>();
-        for (TapDuLieuEntity dataset : datasets) {
-            list.add(toDatasetResponse(dataset));
-        }
-        return list;
+        return datasetRepository.findAllFullOrderByIdAsc();
     }
 
     @Transactional(readOnly = true)
     public TapDuLieu getDatasetById(int datasetId) {
-        return toDatasetResponse(requireDataset(datasetId));
+        return requireDataset(datasetId);
     }
 
     @Transactional
@@ -133,7 +119,7 @@ public class DatasetCatalogService {
             throw new IllegalArgumentException("File upload is empty");
         }
 
-        TapDuLieuEntity dataset = requireDataset(datasetId);
+        requireDataset(datasetId);
 
         String originalName = file.getOriginalFilename();
         String extension = extractExtension(originalName);
@@ -147,60 +133,19 @@ public class DatasetCatalogService {
             throw new IllegalArgumentException("Could not store file: " + ex.getMessage());
         }
 
-        MauEntity sample = new MauEntity();
-        sample.setDuongDanAnh("/uploads/dataset-" + datasetId + "/" + generated);
-        sample.setDoPhanGiai("unknown");
-        dataset.addMau(sample);
+        String duongDan = "/uploads/dataset-" + datasetId + "/" + generated;
+        int mauId = datasetRepository.insertMau(datasetId, duongDan, "unknown");
 
-        TapDuLieuEntity saved = tapDuLieuRepository.save(dataset);
-
-        MauEntity created = null;
-        for (MauEntity item : saved.getDsMau()) {
-            if (sample.getDuongDanAnh().equals(item.getDuongDanAnh())) {
-                created = item;
-            }
-        }
-
-        if (created == null) {
-            throw new IllegalStateException("Could not persist uploaded sample");
-        }
-
-        return toSampleResponse(created);
+        return new Mau(mauId, duongDan, "unknown", List.of());
     }
 
     public String getUploadRoot() {
         return uploadRoot.toString();
     }
 
-    private TapDuLieu toDatasetResponse(TapDuLieuEntity dataset) {
-        List<Mau> samples = new ArrayList<>();
-        for (MauEntity sample : dataset.getDsMau()) {
-            samples.add(toSampleResponse(sample));
-        }
-        return new TapDuLieu(dataset.getId(), dataset.getTen(), samples);
-    }
-
-    private Mau toSampleResponse(MauEntity sample) {
-        List<KhungNhanDang> boxes = new ArrayList<>();
-        for (KhungNhanDangEntity box : sample.getDsBien()) {
-            boxes.add(toBoxResponse(box));
-        }
-        return new Mau(sample.getId(), sample.getDuongDanAnh(), sample.getDoPhanGiai(), boxes);
-    }
-
-    private KhungNhanDang toBoxResponse(KhungNhanDangEntity box) {
-        LoaiBien bien = null;
-        if (box.getBien() != null) {
-            bien = new LoaiBien(box.getBien().getId(), box.getBien().getTen());
-        }
-        return new KhungNhanDang(
-                box.getId(),
-                box.getXCenter(),
-                box.getYCenter(),
-                box.getW(),
-                box.getH(),
-                bien
-        );
+    private TapDuLieu requireDataset(int datasetId) {
+        return datasetRepository.findFullById(datasetId)
+                .orElseThrow(() -> new IllegalStateException("Dataset not found: " + datasetId));
     }
 
     private void initStorage() {
@@ -210,11 +155,6 @@ public class DatasetCatalogService {
         } catch (IOException ex) {
             throw new IllegalStateException("Cannot initialize upload directory: " + uploadRoot, ex);
         }
-    }
-
-    private TapDuLieuEntity requireDataset(int datasetId) {
-        return tapDuLieuRepository.findById(datasetId)
-                .orElseThrow(() -> new IllegalStateException("Dataset not found: " + datasetId));
     }
 
     private String normalizeDatasetName(String tenDataset) {
@@ -237,23 +177,22 @@ public class DatasetCatalogService {
         return result;
     }
 
-    private void removeSamples(TapDuLieuEntity dataset, List<Integer> removeSampleIds) {
+    private void removeSamples(int datasetId, TapDuLieu current, List<Integer> removeSampleIds) {
         if (removeSampleIds == null || removeSampleIds.isEmpty()) {
             return;
         }
         Set<Integer> removeSet = new HashSet<>(removeSampleIds);
-        Iterator<MauEntity> iterator = dataset.getDsMau().iterator();
-        while (iterator.hasNext()) {
-            MauEntity sample = iterator.next();
-            if (sample.getId() != null && removeSet.contains(sample.getId())) {
-                deleteSampleFileIfExists(dataset.getId(), sample.getDuongDanAnh());
-                iterator.remove();
-                sample.setTapDuLieu(null);
+        if (current.dsMau() != null) {
+            for (Mau sample : current.dsMau()) {
+                if (sample.id() != null && removeSet.contains(sample.id())) {
+                    deleteSampleFileIfExists(datasetId, sample.duongDanAnh());
+                }
             }
         }
+        datasetRepository.deleteMauForDatasetWhereIdIn(datasetId, new ArrayList<>(removeSet));
     }
 
-    private void addUploadedSamples(TapDuLieuEntity dataset, List<MultipartFile> imageFiles, List<MultipartFile> labelFiles) {
+    private void addUploadedSamples(int datasetId, List<MultipartFile> imageFiles, List<MultipartFile> labelFiles) {
         if (imageFiles.isEmpty()) {
             return;
         }
@@ -261,16 +200,13 @@ public class DatasetCatalogService {
         List<LabelFileContent> parsedLabels = parseLabelFiles(labelFiles);
         Map<String, List<ParsedLabel>> labelsByImageName = new HashMap<>();
         for (LabelFileContent item : parsedLabels) {
-            labelsByImageName.putIfAbsent(item.baseName(), item.labels());
+            labelsByImageName.put(item.baseName(), item.labels());
         }
         boolean useIndexFallback = !parsedLabels.isEmpty() && parsedLabels.size() == imageFiles.size();
 
-        Map<Integer, LoaiBienEntity> loaiBienMap = new HashMap<>();
-        for (LoaiBienEntity loaiBien : loaiBienRepository.findAll()) {
-            loaiBienMap.put(loaiBien.getId(), loaiBien);
-        }
+        Map<Integer, LoaiBien> loaiBienMap = datasetRepository.loadLoaiBienById();
 
-        Path datasetFolder = uploadRoot.resolve("dataset-" + dataset.getId());
+        Path datasetFolder = uploadRoot.resolve("dataset-" + datasetId);
         try {
             Files.createDirectories(datasetFolder);
         } catch (IOException ex) {
@@ -287,9 +223,8 @@ public class DatasetCatalogService {
                 throw new IllegalArgumentException("Không thể lưu ảnh upload: " + ex.getMessage(), ex);
             }
 
-            MauEntity sample = new MauEntity();
-            sample.setDuongDanAnh("/uploads/dataset-" + dataset.getId() + "/" + generated);
-            sample.setDoPhanGiai("unknown");
+            String duongDan = "/uploads/dataset-" + datasetId + "/" + generated;
+            int mauId = datasetRepository.insertMau(datasetId, duongDan, "unknown");
 
             String imageBaseName = extractBaseName(image.getOriginalFilename());
             List<ParsedLabel> labels = labelsByImageName.get(imageBaseName);
@@ -297,33 +232,31 @@ public class DatasetCatalogService {
                 labels = parsedLabels.get(i).labels();
             }
             if (labels != null && !labels.isEmpty()) {
-                attachLabels(sample, labels, loaiBienMap, image.getOriginalFilename());
+                attachLabels(mauId, labels, loaiBienMap, image.getOriginalFilename());
             }
-
-            dataset.addMau(sample);
         }
     }
 
     private void attachLabels(
-            MauEntity sample,
+            int mauId,
             List<ParsedLabel> labels,
-            Map<Integer, LoaiBienEntity> loaiBienMap,
+            Map<Integer, LoaiBien> loaiBienMap,
             String sourceName
     ) {
         for (ParsedLabel label : labels) {
-            LoaiBienEntity loaiBien = loaiBienMap.get(label.classId());
-            if (loaiBien == null) {
+            LoaiBien loaiBien = loaiBienMap.get(label.classId());
+            if (loaiBien == null || loaiBien.id() == null) {
                 throw new IllegalArgumentException("Label file " + sourceName + " chứa classId không hợp lệ: " + label.classId());
             }
 
-            KhungNhanDangEntity box = new KhungNhanDangEntity();
-            box.setXCenter(label.xCenter());
-            box.setYCenter(label.yCenter());
-            box.setW(label.w());
-            box.setH(label.h());
-            box.setBien(loaiBien);
-            box.setMau(sample);
-            sample.getDsBien().add(box);
+            datasetRepository.insertKhungNhanDang(
+                    mauId,
+                    label.xCenter(),
+                    label.yCenter(),
+                    label.w(),
+                    label.h(),
+                    loaiBien.id()
+            );
         }
     }
 
@@ -464,4 +397,3 @@ public class DatasetCatalogService {
     private record ParsedLabel(int classId, float xCenter, float yCenter, float w, float h) {
     }
 }
-

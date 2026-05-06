@@ -1,7 +1,7 @@
 package com.trafficsigndetector.datasetservice.api;
 
-import com.trafficsigndetector.datasetservice.model.Mau;
-import com.trafficsigndetector.datasetservice.model.TapDuLieu;
+import com.trafficsigndetector.sharedmodel.Mau;
+import com.trafficsigndetector.sharedmodel.TapDuLieu;
 import com.trafficsigndetector.datasetservice.service.DatasetCatalogService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

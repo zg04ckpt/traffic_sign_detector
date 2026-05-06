@@ -3,7 +3,6 @@ package com.trafficsigndetector.trainingorchestratorservice.api;
 import com.trafficsigndetector.trainingorchestratorservice.model.ErrorResponse;
 import com.trafficsigndetector.trainingorchestratorservice.model.QueueEnqueueResponse;
 import com.trafficsigndetector.trainingorchestratorservice.model.StartTrainingResponse;
-import com.trafficsigndetector.trainingorchestratorservice.model.ThongTinHL;
 import com.trafficsigndetector.trainingorchestratorservice.model.TimelineResponse;
 import com.trafficsigndetector.trainingorchestratorservice.messaging.TrainingJobMessage;
 import com.trafficsigndetector.trainingorchestratorservice.messaging.TrainingJobPublisher;
@@ -11,6 +10,7 @@ import com.trafficsigndetector.trainingorchestratorservice.messaging.TrainingSta
 import com.trafficsigndetector.trainingorchestratorservice.messaging.TrainingStatusTracker;
 import com.trafficsigndetector.trainingorchestratorservice.service.QueueCapacityExceededException;
 import com.trafficsigndetector.trainingorchestratorservice.service.TrainingSessionService;
+import com.trafficsigndetector.sharedmodel.ThongTinHL;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;

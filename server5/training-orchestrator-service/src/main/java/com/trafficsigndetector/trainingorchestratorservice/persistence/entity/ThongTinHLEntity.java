@@ -1,74 +1,48 @@
 package com.trafficsigndetector.trainingorchestratorservice.persistence.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-
 import java.time.Instant;
 
-@Entity
-@Table(name = "training_session")
+/**
+ * Mutable training session row (PostgreSQL {@code training_session}). Plain bean — no JPA.
+ */
 public class ThongTinHLEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "tracking_id", nullable = false, unique = true, length = 64)
     private String trackingId;
 
-    @Column(name = "epochs", nullable = false)
     private int epochs;
 
-    @Column(name = "batch_size", nullable = false)
     private int batchSize;
 
-    @Column(name = "trang_thai", nullable = false, length = 32)
     private String trangThai;
 
-    @Column(name = "bat_dau_luc")
     private Instant batDauLuc;
 
-    @Column(name = "ket_thuc_luc")
     private Instant ketThucLuc;
 
-    @Column(name = "do_chinh_xac")
     private Double doChinhXac;
 
-    @Column(name = "do_nhay")
     private Double doNhay;
 
-    @Column(name = "current_epoch")
     private Integer currentEpoch;
 
-    @Column(name = "learning_rate", nullable = false)
     private double learningRate;
 
-    @Column(name = "kich_thuoc_anh", nullable = false)
     private int kichThuocAnh;
 
-    @Column(name = "loai_thiet_bi", nullable = false, length = 32)
     private String loaiThietBi;
 
-    @Column(name = "early_stopping_patience", nullable = false)
     private int earlyStoppingPatience;
 
-    @Column(name = "optimizer", nullable = false, length = 64)
     private String optimizer;
 
-    @Column(name = "phien_ban_hl_json", nullable = false, columnDefinition = "text")
     private String phienBanHLJson;
 
-    @Column(name = "mo_hinh_hl_json", nullable = false, columnDefinition = "text")
     private String moHinhHLJson;
 
-    @Column(name = "ds_mau_hl_json", nullable = false, columnDefinition = "text")
     private String dsMauHLJson;
 
-    @Column(name = "duong_dan_mo_hinh_ket_qua", columnDefinition = "text")
     private String duongDanMoHinhKetQua;
 
     public Integer getId() {

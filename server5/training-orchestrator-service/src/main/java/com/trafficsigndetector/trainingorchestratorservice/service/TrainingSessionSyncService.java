@@ -3,8 +3,8 @@ package com.trafficsigndetector.trainingorchestratorservice.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.trafficsigndetector.trainingorchestratorservice.messaging.TrainingSessionEventMessage;
 import com.trafficsigndetector.trainingorchestratorservice.persistence.entity.ThongTinHLEntity;
+import com.trafficsigndetector.trainingorchestratorservice.persistence.jdbc.TrainingSessionSqliteJdbcRepository;
 import com.trafficsigndetector.trainingorchestratorservice.persistence.sqlite.TrainingSessionSqliteEntity;
-import com.trafficsigndetector.trainingorchestratorservice.persistence.sqlite.TrainingSessionSqliteRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,16 +25,16 @@ import java.util.Optional;
 @Slf4j
 public class TrainingSessionSyncService {
 
-    private final TrainingSessionSqliteRepository sqliteRepository;
+    private final TrainingSessionSqliteJdbcRepository trainingSessionSqliteJdbcRepository;
     private final ObjectMapper objectMapper;
 
     @Value("${app.migration.sqlite-enabled:false}")
     private boolean sqliteEnabled;
 
     public TrainingSessionSyncService(
-            TrainingSessionSqliteRepository sqliteRepository,
+            TrainingSessionSqliteJdbcRepository trainingSessionSqliteJdbcRepository,
             ObjectMapper objectMapper) {
-        this.sqliteRepository = sqliteRepository;
+        this.trainingSessionSqliteJdbcRepository = trainingSessionSqliteJdbcRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -62,7 +62,7 @@ public class TrainingSessionSyncService {
             log.debug("Received training event: id={}, type={}", sessionId, eventType);
 
             // Update SQLite cache
-            Optional<TrainingSessionSqliteEntity> existing = sqliteRepository.findById(sessionId);
+            Optional<TrainingSessionSqliteEntity> existing = trainingSessionSqliteJdbcRepository.findById(sessionId);
             if (existing.isEmpty()) {
                 log.warn("SQLite record not found for id={}, creating new", sessionId);
             }
@@ -81,7 +81,7 @@ public class TrainingSessionSyncService {
             cache.setSyncedAt(Instant.now());
             cache.setSyncVersion((cache.getSyncVersion() == null ? 0L : cache.getSyncVersion()) + 1);
 
-            TrainingSessionSqliteEntity saved = sqliteRepository.save(cache);
+            TrainingSessionSqliteEntity saved = trainingSessionSqliteJdbcRepository.save(cache);
             log.debug("Synced training to SQLite: id={}, version={}", saved.getId(), saved.getSyncVersion());
 
         } catch (Exception ex) {
@@ -123,7 +123,7 @@ public class TrainingSessionSyncService {
                     .syncVersion(0L)
                     .build();
 
-            sqliteRepository.save(cache);
+            trainingSessionSqliteJdbcRepository.save(cache);
             log.debug("Synced training to SQLite from PostgreSQL insert: id={}", postgres.getId());
         } catch (Exception ex) {
             log.error("Failed to sync training to SQLite from PostgreSQL: id={}, error={}", 

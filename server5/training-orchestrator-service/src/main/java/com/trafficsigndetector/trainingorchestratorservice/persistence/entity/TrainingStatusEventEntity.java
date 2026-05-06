@@ -1,53 +1,34 @@
 package com.trafficsigndetector.trainingorchestratorservice.persistence.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-
 import java.time.Instant;
 
-@Entity
-@Table(name = "training_status_event")
+/**
+ * Timeline row for {@code training_status_event}. Plain bean — no JPA.
+ */
 public class TrainingStatusEventEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "session_id", nullable = false)
     private Integer sessionId;
 
-    @Column(name = "tracking_id", nullable = false, length = 64)
     private String trackingId;
 
-    @Column(name = "state", nullable = false, length = 32)
     private String state;
 
-    @Column(name = "detail", columnDefinition = "text")
     private String detail;
 
-    @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @Column(name = "current_epoch")
     private Integer currentEpoch;
 
-    @Column(name = "precision")
     private Double precision;
 
-    @Column(name = "recall")
     private Double recall;
 
-    @Column(name = "log_line", columnDefinition = "text")
     private String logLine;
 
-    @Column(name = "model_artifact_path", columnDefinition = "text")
     private String modelArtifactPath;
 
-    @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
     public Long getId() {

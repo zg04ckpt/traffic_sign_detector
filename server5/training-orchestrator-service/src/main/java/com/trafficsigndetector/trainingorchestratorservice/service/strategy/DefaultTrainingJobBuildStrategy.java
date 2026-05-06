@@ -1,7 +1,7 @@
 package com.trafficsigndetector.trainingorchestratorservice.service.strategy;
 
 import com.trafficsigndetector.trainingorchestratorservice.messaging.TrainingJobMessage;
-import com.trafficsigndetector.trainingorchestratorservice.model.MauHL;
+import com.trafficsigndetector.sharedmodel.MauHL;
 import com.trafficsigndetector.trainingorchestratorservice.persistence.entity.ThongTinHLEntity;
 import org.springframework.stereotype.Component;
 
