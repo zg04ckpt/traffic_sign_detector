@@ -1,0 +1,70 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "10"
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"name":"api-gateway","namespace":"server5"},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"api-gateway"}},"template":{"metadata":{"labels":{"app":"api-gateway"}},"spec":{"containers":[{"envFrom":[{"configMapRef":{"name":"server5-common-config"}}],"image":"server5/api-gateway:local","imagePullPolicy":"IfNotPresent","name":"api-gateway","ports":[{"containerPort":8081}]}]}}}}
+  creationTimestamp: "2026-04-07T14:28:33Z"
+  generation: 28
+  name: api-gateway
+  namespace: server5
+  resourceVersion: "75240"
+  uid: 80043956-168c-4ee0-b9bd-897f77c2d3b1
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: api-gateway
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/restartedAt: "2026-04-15T12:59:01+07:00"
+      creationTimestamp: null
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: server5-common-config
+        image: server5/api-gateway:local
+        imagePullPolicy: IfNotPresent
+        name: api-gateway
+        ports:
+        - containerPort: 8081
+          protocol: TCP
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+status:
+  availableReplicas: 1
+  conditions:
+  - lastTransitionTime: "2026-04-07T14:28:33Z"
+    lastUpdateTime: "2026-04-15T05:59:03Z"
+    message: ReplicaSet "api-gateway-7db66998bd" has successfully progressed.
+    reason: NewReplicaSetAvailable
+    status: "True"
+    type: Progressing
+  - lastTransitionTime: "2026-04-17T00:36:12Z"
+    lastUpdateTime: "2026-04-17T00:36:12Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  observedGeneration: 28
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1

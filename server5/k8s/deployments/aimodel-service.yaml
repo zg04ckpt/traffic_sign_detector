@@ -1,0 +1,32 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {}
+  name: aimodel-service
+  namespace: server5
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aimodel-service
+  template:
+    metadata:
+      labels:
+        app: aimodel-service
+    spec:
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: server5-common-config
+        image: server5/aimodel-service:local
+        imagePullPolicy: IfNotPresent
+        name: aimodel-service
+        ports:
+        - containerPort: 8082
+        volumeMounts:
+        - mountPath: /data/aimodel
+          name: training-artifact
+      volumes:
+      - name: training-artifact
+        persistentVolumeClaim:
+          claimName: server5-training-artifact-pvc

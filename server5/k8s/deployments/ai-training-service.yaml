@@ -1,0 +1,44 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {}
+  name: ai-training-service
+  namespace: server5
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-training-service
+  template:
+    metadata:
+      labels:
+        app: ai-training-service
+    spec:
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: server5-common-config
+        env:
+        - name: TRAINING_MODEL_STORE_DIR
+          value: /data/aimodel
+        - name: MODEL_ARTIFACT_PUBLIC_PREFIX
+          value: /runtime/training/outputs
+        - name: LOG_LEVEL
+          value: INFO
+        image: server5/ai-training-service:local
+        imagePullPolicy: IfNotPresent
+        name: ai-training-service
+        volumeMounts:
+        - mountPath: /data/runtime/training/outputs
+          name: training-artifact
+        - mountPath: /data/aimodel
+          name: training-artifact
+        - mountPath: /data/uploads
+          name: uploads
+      volumes:
+      - name: training-artifact
+        persistentVolumeClaim:
+          claimName: server5-training-artifact-pvc
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: server5-uploads-pvc

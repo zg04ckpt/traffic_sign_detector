@@ -1,0 +1,1632 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LPR TrainEngine - Client2</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #090b0e;
+            --surface: #0f1216;
+            --surface-2: #151a1f;
+            --line: #26303a;
+            --line-soft: #1f2730;
+            --text: #f2f6fb;
+            --muted: #9fa9b4;
+            --primary: #80ecff;
+            --primary-strong: #4ddff8;
+            --shadow: 0 22px 48px rgba(0, 0, 0, 0.35);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            min-height: 100%;
+        }
+
+        body {
+            color: var(--text);
+            background: radial-gradient(circle at 20% -20%, rgba(77, 223, 248, 0.12), transparent 36%),
+                        radial-gradient(circle at 85% 20%, rgba(112, 214, 255, 0.09), transparent 30%),
+                        var(--bg);
+            font-family: "Inter", "Segoe UI", sans-serif;
+        }
+
+        .app {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 40;
+            height: 64px;
+            border-bottom: 1px solid var(--line-soft);
+            background: rgba(5, 8, 11, 0.86);
+            backdrop-filter: blur(12px);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 0 28px;
+        }
+
+        .brand {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 29px;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -0.02em;
+            color: var(--primary);
+            white-space: nowrap;
+        }
+
+        .stepper {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            flex-wrap: wrap;
+            justify-content: center;
+            flex: 1;
+        }
+
+        .step {
+            border: 0;
+            background: transparent;
+            color: #8d99a8;
+            font-size: 13px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.2s ease;
+            font-weight: 500;
+        }
+
+        .step:hover:not(:disabled) {
+            color: #d7e6f6;
+            background: #141a22;
+        }
+
+        .step.active {
+            color: var(--primary);
+            background: rgba(128, 236, 255, 0.1);
+            font-weight: 600;
+        }
+
+        .step:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .content-wrap {
+            width: 100%;
+            max-width: 1240px;
+            margin: 0 auto;
+            padding: 30px 24px 120px;
+            position: relative;
+            flex: 1;
+        }
+
+        .toast {
+            display: none;
+            margin: 0 0 16px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid transparent;
+            font-size: 13px;
+            max-width: 850px;
+        }
+
+        .toast.ok {
+            display: block;
+            color: #dff8ff;
+            background: rgba(42, 74, 92, 0.36);
+            border-color: rgba(112, 214, 255, 0.36);
+        }
+
+        .toast.err {
+            display: block;
+            color: #ffd8de;
+            background: rgba(114, 33, 48, 0.34);
+            border-color: rgba(255, 111, 125, 0.4);
+        }
+
+        .view {
+            display: none;
+            animation: fadeIn 0.28s ease;
+        }
+
+        .view.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .hero {
+            min-height: 72vh;
+            display: grid;
+            place-items: center;
+            text-align: center;
+            padding: 24px;
+        }
+
+        .hero h1 {
+            margin: 0;
+            font-family: "Space Grotesk", sans-serif;
+            font-size: clamp(34px, 5vw, 56px);
+            line-height: 1.08;
+            letter-spacing: -0.025em;
+        }
+
+        .hero p {
+            margin: 14px auto 0;
+            color: var(--muted);
+            font-size: 18px;
+            line-height: 1.6;
+            max-width: 700px;
+        }
+
+        .center-card {
+            margin-top: 32px;
+            width: min(620px, 100%);
+            background: linear-gradient(180deg, rgba(14, 18, 23, 0.96), rgba(9, 12, 16, 0.94));
+            border: 1px solid rgba(128, 236, 255, 0.2);
+            border-radius: 14px;
+            padding: 38px;
+            box-shadow: var(--shadow);
+        }
+
+        .play-node {
+            width: 108px;
+            height: 108px;
+            margin: 0 auto 24px;
+            border-radius: 22px;
+            border: 1px solid rgba(128, 236, 255, 0.33);
+            background: linear-gradient(145deg, #20252c, #15191e);
+            display: grid;
+            place-items: center;
+            color: var(--primary);
+            font-size: 42px;
+        }
+
+        .center-card h2 {
+            margin: 0;
+            font-family: "Space Grotesk", sans-serif;
+            font-size: clamp(28px, 3vw, 38px);
+            letter-spacing: -0.02em;
+        }
+
+        .center-card p {
+            margin: 12px auto 0;
+            color: var(--muted);
+            font-size: 16px;
+            max-width: 480px;
+            line-height: 1.5;
+        }
+
+        button {
+            appearance: none;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            padding: 12px 18px;
+            background: #1d2d37;
+            color: #dceaf8;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
+        #btnStartFlow,
+        #btnToStep3,
+        #btnToStep4,
+        #btnStartTraining,
+        #btnToResult,
+        #btnSaveVersion {
+            background: linear-gradient(90deg, var(--primary), var(--primary-strong));
+            color: #01333f;
+            border-color: rgba(128, 236, 255, 0.26);
+            box-shadow: 0 12px 24px rgba(77, 223, 248, 0.18);
+        }
+
+        #btnStartFlow:hover,
+        #btnToStep3:hover,
+        #btnToStep4:hover,
+        #btnStartTraining:hover,
+        #btnToResult:hover,
+        #btnSaveVersion:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.03);
+        }
+
+        .btn-ghost,
+        button.secondary,
+        #btnSkipSave {
+            background: rgba(30, 38, 49, 0.82);
+            color: #becde0;
+            border-color: rgba(66, 82, 98, 0.7);
+        }
+
+        .btn-ghost:hover,
+        button.secondary:hover,
+        #btnSkipSave:hover {
+            background: rgba(42, 52, 67, 0.92);
+            color: #ecf7ff;
+        }
+
+        button.warn,
+        #btnCancelTrain {
+            background: rgba(107, 44, 52, 0.8);
+            border-color: rgba(255, 111, 125, 0.4);
+            color: #ffd7de;
+        }
+
+        button.warn:hover,
+        #btnCancelTrain:hover {
+            background: rgba(125, 53, 62, 0.88);
+        }
+
+        .layout-narrow {
+            width: min(860px, 100%);
+            margin: 0 auto;
+        }
+
+        .view-header {
+            margin-bottom: 22px;
+        }
+
+        .eyebrow {
+            margin: 0 0 6px;
+            color: var(--primary);
+            font-size: 11px;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .view-header h2 {
+            margin: 0;
+            font-family: "Space Grotesk", sans-serif;
+            font-size: clamp(34px, 5vw, 50px);
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+        }
+
+        .muted {
+            margin: 10px 0 0;
+            color: var(--muted);
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .panel {
+            background: linear-gradient(180deg, rgba(15, 19, 24, 0.96), rgba(11, 14, 18, 0.96));
+            border: 1px solid var(--line-soft);
+            border-radius: 14px;
+            padding: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .panel-title {
+            margin: 0 0 16px;
+            color: #c5d2e1;
+            font-size: 12px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            color: #9fb0c2;
+            font-size: 12px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        input,
+        select {
+            width: 100%;
+            background: var(--surface-2);
+            color: var(--text);
+            border: 1px solid #303a46;
+            border-radius: 10px;
+            font-size: 15px;
+            padding: 11px 12px;
+            outline: none;
+            transition: 0.2s ease;
+        }
+
+        input:focus,
+        select:focus {
+            border-color: rgba(128, 236, 255, 0.8);
+            box-shadow: 0 0 0 3px rgba(128, 236, 255, 0.1);
+        }
+
+        .hint {
+            margin-top: 4px;
+            color: #7d8da1;
+            font-size: 11px;
+        }
+
+        .actions {
+            margin-top: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .dataset-toolbar {
+            display: grid;
+            grid-template-columns: minmax(200px, 340px) 1fr auto;
+            gap: 12px;
+            align-items: center;
+            margin: 0 0 14px;
+        }
+
+        .counter {
+            color: #c8d8eb;
+            font-size: 14px;
+        }
+
+        .counter strong {
+            color: var(--primary);
+        }
+
+        .sample-grid {
+            border: 1px solid var(--line-soft);
+            border-radius: 12px;
+            background: rgba(10, 12, 15, 0.65);
+            padding: 12px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+            gap: 10px;
+            min-height: 200px;
+            max-height: 460px;
+            overflow: auto;
+        }
+
+        .sample-card {
+            position: relative;
+            border: 1px solid #2f3a46;
+            border-radius: 12px;
+            background: #11161b;
+            overflow: hidden;
+            padding: 0;
+            color: #d3e2f1;
+            display: grid;
+            cursor: pointer;
+        }
+
+        .sample-card img {
+            width: 100%;
+            height: 108px;
+            object-fit: cover;
+            background: #0f141a;
+        }
+
+        .sample-name {
+            padding: 8px;
+            font-size: 11px;
+            color: #9db0c5;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .sample-card .check {
+            position: absolute;
+            right: 8px;
+            top: 8px;
+            width: 24px;
+            height: 24px;
+            border-radius: 999px;
+            border: 1px solid rgba(208, 230, 255, 0.6);
+            background: rgba(4, 7, 10, 0.65);
+            display: grid;
+            place-items: center;
+            font-size: 14px;
+            opacity: 0;
+            transition: 0.2s ease;
+        }
+
+        .sample-card.selected {
+            border-color: rgba(128, 236, 255, 0.9);
+            box-shadow: inset 0 0 0 1px rgba(128, 236, 255, 0.5), 0 10px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .sample-card.selected .check {
+            opacity: 1;
+            background: rgba(128, 236, 255, 0.95);
+            color: #042f39;
+            border-color: transparent;
+        }
+
+        .progress-header {
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .progress-title {
+            margin: 0;
+            font-family: "Space Grotesk", sans-serif;
+            font-size: clamp(30px, 4.4vw, 44px);
+            letter-spacing: -0.02em;
+        }
+
+        .progress-meta {
+            color: var(--primary);
+            font-size: 15px;
+        }
+
+        .progress-card {
+            background: linear-gradient(180deg, rgba(16, 21, 27, 0.96), rgba(11, 15, 19, 0.96));
+            border: 1px solid var(--line-soft);
+            border-radius: 14px;
+            padding: 22px;
+            margin-top: 14px;
+        }
+
+        .progress-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--muted);
+            font-size: 12px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .progress-epoch {
+            margin: 16px 0;
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 40px;
+            letter-spacing: -0.02em;
+            color: #ffffff;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: #232c37;
+        }
+
+        .progress-fill {
+            width: 0;
+            height: 100%;
+            background: linear-gradient(90deg, #58e3fb, #8bf2ff);
+            transition: width 0.35s ease;
+        }
+
+        .progress-stats {
+            margin-top: 14px;
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+            color: #a4b4c7;
+            font-size: 13px;
+        }
+
+        .train-status {
+            margin-top: 14px;
+            border: 1px solid var(--line-soft);
+            background: rgba(17, 22, 28, 0.9);
+            border-radius: 10px;
+            padding: 12px;
+            display: grid;
+            gap: 6px;
+            color: #c6d4e4;
+            font-size: 13px;
+        }
+
+        .logs {
+            margin-top: 14px;
+            border: 1px solid #293444;
+            border-radius: 12px;
+            background: #05080d;
+            min-height: 250px;
+            max-height: 360px;
+            overflow: auto;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 12px;
+            color: #cdf5ff;
+            line-height: 1.5;
+            padding: 12px;
+            white-space: pre-wrap;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: end;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .result-headline {
+            margin: 0;
+            font-family: "Space Grotesk", sans-serif;
+            font-size: clamp(32px, 4.8vw, 48px);
+            letter-spacing: -0.02em;
+        }
+
+        .result-sub {
+            margin-top: 10px;
+            color: #a6b6c9;
+            font-size: 14px;
+            display: grid;
+            gap: 7px;
+        }
+
+        .result-sub strong {
+            color: var(--primary);
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+
+        .metric {
+            border: 1px solid var(--line-soft);
+            border-left: 3px solid rgba(128, 236, 255, 0.9);
+            border-radius: 12px;
+            background: linear-gradient(180deg, rgba(18, 23, 29, 0.95), rgba(13, 17, 22, 0.95));
+            padding: 16px;
+        }
+
+        .metric-title {
+            color: #90a3b7;
+            font-size: 11px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 36px;
+            letter-spacing: -0.02em;
+            color: #f5fbff;
+            line-height: 1.1;
+        }
+
+        .summary {
+            margin-top: 14px;
+            border: 1px solid var(--line-soft);
+            border-radius: 12px;
+            padding: 14px;
+            background: rgba(16, 21, 27, 0.86);
+            display: grid;
+            gap: 8px;
+            color: #bed0e4;
+            font-size: 13px;
+        }
+
+        .footer {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 30;
+            border-top: 1px solid var(--line-soft);
+            background: rgba(7, 10, 14, 0.92);
+            backdrop-filter: blur(10px);
+            height: 62px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            color: #8ea0b3;
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .footer strong {
+            color: var(--primary);
+            font-size: 13px;
+            letter-spacing: 0.03em;
+            text-transform: none;
+        }
+
+        @media (max-width: 1080px) {
+            .content-wrap {
+                padding: 24px 16px 120px;
+            }
+
+            .topbar {
+                padding: 0 14px;
+            }
+
+            .brand {
+                font-size: 24px;
+            }
+        }
+
+        @media (max-width: 860px) {
+            .grid-2,
+            .metric-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .dataset-toolbar {
+                grid-template-columns: 1fr;
+                align-items: start;
+            }
+
+            .topbar {
+                height: auto;
+                min-height: 64px;
+                padding: 10px 12px;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .stepper {
+                order: 3;
+                width: 100%;
+                justify-content: center;
+            }
+
+            .hero {
+                min-height: auto;
+                padding-top: 18px;
+            }
+
+            .center-card {
+                padding: 20px;
+            }
+
+            .footer {
+                height: auto;
+                min-height: 62px;
+                padding: 10px 14px;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <header class="topbar">
+        <div class="brand">LPR TrainEngine</div>
+        <div class="stepper" id="stepper"></div>
+    </header>
+
+    <main class="content-wrap">
+        <div id="toast" class="toast"></div>
+
+        <section id="view-1" class="view active">
+            <div class="hero">
+                <div>
+                    <h1>Trung tam Huan luyen</h1>
+                    <p>San sang khoi tao quy trinh hoc sau cho he thong nhan dien bien so the he tiep theo.</p>
+                    <div class="center-card">
+                        <div class="play-node">&#9654;</div>
+                        <h2>Bat dau quy trinh moi</h2>
+                        <p>Kich hoat engine de bat dau qua trinh huan luyen mo hinh nhan dien bien so xe.</p>
+                        <div class="actions" style="justify-content:center; margin-top:22px;">
+                            <button id="btnStartFlow">Bat dau huan luyen</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-2" class="view layout-narrow">
+            <header class="view-header">
+                <p class="eyebrow">Step 01 - Configuration</p>
+                <h2>Model Selection</h2>
+                <p class="muted">Define the core architecture for the license plate recognition engine.</p>
+            </header>
+
+            <div class="panel">
+                <h3 class="panel-title">Model architecture</h3>
+                <div class="grid-2">
+                    <div class="field">
+                        <label for="modelSelect">Danh sach mo hinh</label>
+                        <select id="modelSelect"></select>
+                        <div class="hint">Lua chon anh huong truc tiep den toc do va do chinh xac.</div>
+                    </div>
+                    <div class="field">
+                        <label for="versionSelect">Danh sach phien ban</label>
+                        <select id="versionSelect"></select>
+                        <div class="hint">Su dung phien ban moi de co ket qua tot nhat.</div>
+                    </div>
+                </div>
+                <div class="actions">
+                    <button class="secondary" data-prev="1">Quay lai</button>
+                    <button id="btnToStep3">Tiep tuc</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-3" class="view">
+            <div class="view-header">
+                <h2>Chon Mau</h2>
+                <p class="muted">Lua chon mau du lieu dau vao de huan luyen. Co the chon nhieu mau cung luc.</p>
+            </div>
+
+            <div class="panel">
+                <div class="dataset-toolbar">
+                    <div class="field" style="margin:0;">
+                        <label for="datasetSelect">Select dataset</label>
+                        <select id="datasetSelect"></select>
+                    </div>
+                    <div class="counter" id="pickedCount">Da chon <strong>0</strong> mau</div>
+                    <div style="display:flex; gap:8px; justify-content:flex-end;">
+                        <button type="button" class="btn-ghost" id="btnPickAll">Chon tat ca</button>
+                        <button type="button" class="btn-ghost" id="btnClearPick">Bo chon</button>
+                    </div>
+                </div>
+
+                <div id="sampleGrid" class="sample-grid"></div>
+
+                <div class="actions">
+                    <button class="secondary" data-prev="2">Quay lai</button>
+                    <button id="btnToStep4">Tiep tuc</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-4" class="view layout-narrow">
+            <header class="view-header">
+                <p class="eyebrow">Hyperparameter tuning</p>
+                <h2>Training Configuration</h2>
+                <p class="muted">Toi uu bo tham so de can bang giua toc do hoi tu va do chinh xac cuoi cung.</p>
+            </header>
+
+            <div class="panel">
+                <h3 class="panel-title">Core engine settings</h3>
+                <div class="grid-2">
+                    <div class="field">
+                        <label for="cfgBatchSize">Batch Size</label>
+                        <input id="cfgBatchSize" value="256">
+                        <div class="hint">Khuyen nghi 128-512 cho GPU.</div>
+                    </div>
+                    <div class="field">
+                        <label for="cfgEpochs">Epochs</label>
+                        <input id="cfgEpochs" value="20">
+                        <div class="hint">Tang epochs de model hoc sau hon.</div>
+                    </div>
+                    <div class="field">
+                        <label for="cfgLearningRate">Learning Rate</label>
+                        <input id="cfgLearningRate" value="0.01">
+                        <div class="hint">Gia tri nho giup train on dinh.</div>
+                    </div>
+                    <div class="field">
+                        <label for="cfgImageSize">Image Size</label>
+                        <input id="cfgImageSize" value="416">
+                        <div class="hint">Kich thuoc lon hon yeu cau tai nguyen cao hon.</div>
+                    </div>
+                </div>
+
+                <h3 class="panel-title" style="margin-top:22px;">Execution logic</h3>
+                <div class="grid-2">
+                    <div class="field">
+                        <label for="cfgOptimizer">Optimizer</label>
+                        <select id="cfgOptimizer">
+                            <option>Adam</option>
+                            <option>SGD</option>
+                            <option>AdamW</option>
+                            <option>NAdam</option>
+                            <option>RAdam</option>
+                            <option>RMSProp</option>
+                            <option>auto</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="cfgDevice">Loai thiet bi</label>
+                        <select id="cfgDevice">
+                            <option value="gpu">gpu</option>
+                            <option value="cpu">cpu</option>
+                        </select>
+                    </div>
+                    <div class="field" style="grid-column:1 / -1;">
+                        <label for="cfgPatience">Early Stopping Patience: <span id="patienceLabel">5</span></label>
+                        <input id="cfgPatience" type="range" min="0" max="30" step="1" value="5">
+                        <div class="hint">Dung train neu loss khong cai thien qua so epoch da dat.</div>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="secondary" data-prev="3">Quay lai</button>
+                    <button id="btnStartTraining">Continue to run</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-5" class="view layout-narrow">
+            <div class="progress-header">
+                <div>
+                    <p class="eyebrow">Training in progress</p>
+                    <h2 class="progress-title" id="progressModelName">Dang khoi tao training</h2>
+                    <div class="progress-meta" id="progressVersion">Version: -</div>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button id="btnCancelTrain" class="warn">Dung</button>
+                </div>
+            </div>
+
+            <div class="progress-card">
+                <div class="progress-head">
+                    <span>Tien do huan luyen</span>
+                    <span id="progressPct">0%</span>
+                </div>
+                <div class="progress-epoch" id="progressEpoch">0 / 0 epochs</div>
+                <div class="progress-bar">
+                    <div id="progressBarFill" class="progress-fill"></div>
+                </div>
+                <div class="progress-stats">
+                    <span id="progressSteps">Steps: -</span>
+                    <span id="progressEta">Thoi gian du kien: -</span>
+                </div>
+            </div>
+
+            <div class="train-status" id="trainingMeta"></div>
+            <div class="logs" id="trainingLogs">Dang cho bat dau huan luyen...</div>
+
+            <div class="actions">
+                <button id="btnToResult" disabled>Tiep tuc sang ket qua</button>
+            </div>
+        </section>
+
+        <section id="view-6" class="view layout-narrow">
+            <header class="result-header">
+                <div>
+                    <h2 class="result-headline">Training Results Summary</h2>
+                    <div class="result-sub">
+                        <div>Ten mo hinh: <strong id="lbTenMoHinh">-</strong></div>
+                        <div>Ten phien ban duoc huan luyen: <strong id="lbTenPhienBanHL">-</strong></div>
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button id="btnSkipSave" class="secondary">Khong luu phien ban</button>
+                    <button id="btnSaveVersion">Luu phien ban</button>
+                    <button id="btnBackManage" class="secondary" style="display:none;">Quay ve trang quan ly</button>
+                </div>
+            </header>
+
+            <div class="metric-grid">
+                <article class="metric">
+                    <div class="metric-title">Trang thai</div>
+                    <div class="metric-value" id="lbTrangThai">-</div>
+                </article>
+                <article class="metric">
+                    <div class="metric-title">Do chinh xac</div>
+                    <div class="metric-value" id="lbDoChinhXac">-</div>
+                </article>
+                <article class="metric">
+                    <div class="metric-title">Do nhay (Recall)</div>
+                    <div class="metric-value" id="lbDoNhay">-</div>
+                </article>
+                <article class="metric">
+                    <div class="metric-title">Thoi gian chay</div>
+                    <div class="metric-value" id="lbThoiGianChay">-</div>
+                </article>
+            </div>
+
+            <div id="summary" class="summary"></div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <span>System Ready</span>
+        <span id="pickedCountFooter">So mau da chon: <strong>0</strong></span>
+    </footer>
+</div>
+
+<script>
+    const steps = [
+        { id: 1, name: "Dashboard" },
+        { id: 2, name: "Model" },
+        { id: 3, name: "Dataset" },
+        { id: 4, name: "Config" },
+        { id: 5, name: "Progress" },
+        { id: 6, name: "Results" }
+    ];
+
+    const state = {
+        currentStep: 1,
+        models: [],
+        datasets: [],
+        selectedModel: null,
+        selectedVersion: null,
+        selectedDataset: null,
+        selectedSamples: new Map(),
+        config: {},
+        trainingId: null,
+        trackingId: "",
+        latestResult: null,
+        latestStatus: null,
+        timeline: [],
+        pollTimer: null,
+        timelineSignatures: new Set()
+    };
+
+    const el = {
+        stepper: document.getElementById("stepper"),
+        toast: document.getElementById("toast"),
+        modelSelect: document.getElementById("modelSelect"),
+        versionSelect: document.getElementById("versionSelect"),
+        datasetSelect: document.getElementById("datasetSelect"),
+        sampleGrid: document.getElementById("sampleGrid"),
+        pickedCount: document.getElementById("pickedCount"),
+        pickedCountFooter: document.getElementById("pickedCountFooter"),
+        trainingMeta: document.getElementById("trainingMeta"),
+        trainingLogs: document.getElementById("trainingLogs"),
+        summary: document.getElementById("summary"),
+        cfgBatchSize: document.getElementById("cfgBatchSize"),
+        cfgEpochs: document.getElementById("cfgEpochs"),
+        cfgLearningRate: document.getElementById("cfgLearningRate"),
+        cfgImageSize: document.getElementById("cfgImageSize"),
+        cfgPatience: document.getElementById("cfgPatience"),
+        cfgDevice: document.getElementById("cfgDevice"),
+        cfgOptimizer: document.getElementById("cfgOptimizer"),
+        btnToResult: document.getElementById("btnToResult"),
+        progressModelName: document.getElementById("progressModelName"),
+        progressVersion: document.getElementById("progressVersion"),
+        progressPct: document.getElementById("progressPct"),
+        progressEpoch: document.getElementById("progressEpoch"),
+        progressSteps: document.getElementById("progressSteps"),
+        progressEta: document.getElementById("progressEta"),
+        progressBarFill: document.getElementById("progressBarFill"),
+        lbTenMoHinh: document.getElementById("lbTenMoHinh"),
+        lbTenPhienBanHL: document.getElementById("lbTenPhienBanHL"),
+        lbTrangThai: document.getElementById("lbTrangThai"),
+        lbDoChinhXac: document.getElementById("lbDoChinhXac"),
+        lbDoNhay: document.getElementById("lbDoNhay"),
+        lbThoiGianChay: document.getElementById("lbThoiGianChay"),
+        patienceLabel: document.getElementById("patienceLabel"),
+        btnSaveVersion: document.getElementById("btnSaveVersion"),
+        btnSkipSave: document.getElementById("btnSkipSave"),
+        btnBackManage: document.getElementById("btnBackManage")
+    };
+
+    function updateResultActionButtons(completed) {
+        el.btnSaveVersion.style.display = completed ? "none" : "inline-block";
+        el.btnSkipSave.style.display = completed ? "none" : "inline-block";
+        el.btnBackManage.style.display = completed ? "inline-block" : "none";
+    }
+
+    function showToast(message, isError = false) {
+        el.toast.textContent = message;
+        el.toast.className = isError ? "toast err" : "toast ok";
+    }
+
+    function clearToast() {
+        el.toast.className = "toast";
+        el.toast.textContent = "";
+    }
+
+    function get(obj, key, fallback = undefined) {
+        if (obj == null) return fallback;
+        if (Object.prototype.hasOwnProperty.call(obj, key)) return obj[key];
+        const lower = key.toLowerCase();
+        for (const k of Object.keys(obj)) {
+            if (k.toLowerCase() === lower) return obj[k];
+        }
+        return fallback;
+    }
+
+    function asNumber(value) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function pickNumber(obj, keys) {
+        for (const key of keys) {
+            const n = asNumber(get(obj, key, null));
+            if (n !== null) return n;
+        }
+        return null;
+    }
+
+    function formatMaybePercent(value) {
+        const n = asNumber(value);
+        if (n === null) return "-";
+        return (Math.round(n * 100) / 100).toString() + "%";
+    }
+
+    function buildStepper() {
+        el.stepper.innerHTML = "";
+        for (const step of steps) {
+            const btn = document.createElement("button");
+            btn.className = "step";
+            btn.type = "button";
+            btn.textContent = step.name;
+            if (step.id === state.currentStep) btn.classList.add("active");
+            btn.addEventListener("click", () => goStep(step.id));
+            el.stepper.appendChild(btn);
+        }
+    }
+
+    function goStep(stepId) {
+        state.currentStep = stepId;
+        document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+        const target = document.getElementById("view-" + stepId);
+        if (target) target.classList.add("active");
+        buildStepper();
+        clearToast();
+    }
+
+    async function api(method, url, payload = null, isJson = true) {
+        const options = { method };
+        if (payload !== null) {
+            if (isJson) {
+                options.headers = { "Content-Type": "application/json" };
+                options.body = JSON.stringify(payload);
+            } else {
+                options.body = payload;
+            }
+        }
+
+        const res = await fetch(url, options);
+        const text = await res.text();
+        if (!res.ok) {
+            throw new Error("HTTP " + res.status + " - " + text);
+        }
+
+        if (!text) return {};
+        try {
+            return JSON.parse(text);
+        } catch {
+            return text;
+        }
+    }
+
+    async function loadModels() {
+        const data = await api("GET", "/client2/trainings/models");
+        state.models = Array.isArray(data) ? data : [];
+        if (state.models.length === 0) {
+            throw new Error("Khong tim thay du lieu mo hinh.");
+        }
+        renderModels();
+    }
+
+    function renderModels() {
+        el.modelSelect.innerHTML = "";
+        for (const model of state.models) {
+            const option = document.createElement("option");
+            option.value = String(get(model, "Id", ""));
+            option.textContent = get(model, "Ten", "(Khong ten)");
+            el.modelSelect.appendChild(option);
+        }
+        syncSelectedModel();
+    }
+
+    function syncSelectedModel() {
+        const selectedId = Number(el.modelSelect.value);
+        state.selectedModel = state.models.find(m => Number(get(m, "Id", -1)) === selectedId) || state.models[0] || null;
+        const versions = get(state.selectedModel || {}, "DsPhienBan", []);
+        el.versionSelect.innerHTML = "";
+        for (const version of versions) {
+            const option = document.createElement("option");
+            option.value = String(get(version, "Id", ""));
+            option.textContent = get(version, "Ten", "(Khong ten)");
+            el.versionSelect.appendChild(option);
+        }
+        syncSelectedVersion();
+    }
+
+    function syncSelectedVersion() {
+        const versions = get(state.selectedModel || {}, "DsPhienBan", []);
+        const selectedId = Number(el.versionSelect.value);
+        state.selectedVersion = versions.find(v => Number(get(v, "Id", -1)) === selectedId) || versions[0] || null;
+    }
+
+    async function loadDatasets() {
+        const data = await api("GET", "/client2/trainings/datasets");
+        state.datasets = Array.isArray(data) ? data : [];
+        if (state.datasets.length === 0) {
+            throw new Error("Khong tim thay du lieu tap du lieu.");
+        }
+        renderDatasets();
+    }
+
+    function renderDatasets() {
+        el.datasetSelect.innerHTML = "";
+        for (const dataset of state.datasets) {
+            const option = document.createElement("option");
+            option.value = String(get(dataset, "Id", ""));
+            option.textContent = get(dataset, "Ten", "(Khong ten)");
+            el.datasetSelect.appendChild(option);
+        }
+        syncSelectedDataset();
+    }
+
+    function syncSelectedDataset() {
+        const selectedId = Number(el.datasetSelect.value);
+        state.selectedDataset = state.datasets.find(d => Number(get(d, "Id", -1)) === selectedId) || state.datasets[0] || null;
+        renderSamples();
+    }
+
+    function toggleSample(id, sample) {
+        if (state.selectedSamples.has(id)) {
+            state.selectedSamples.delete(id);
+        } else {
+            state.selectedSamples.set(id, sample);
+        }
+    }
+
+    function renderSamples() {
+        const samples = get(state.selectedDataset || {}, "DsMau", []);
+        el.sampleGrid.innerHTML = "";
+
+        if (!Array.isArray(samples) || samples.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "muted";
+            empty.textContent = "Tap du lieu nay chua co mau trong database.";
+            el.sampleGrid.appendChild(empty);
+            refreshPickedCount();
+            return;
+        }
+
+        for (const sample of samples) {
+            const id = Number(get(sample, "Id", -1));
+            const name = "IMG_" + String(id).padStart(4, "0") + ".jpg";
+            const path = String(get(sample, "DuongDanAnh", ""));
+
+            const card = document.createElement("button");
+            card.type = "button";
+            card.className = "sample-card";
+            if (state.selectedSamples.has(id)) {
+                card.classList.add("selected");
+            }
+
+            const img = document.createElement("img");
+            img.src = path;
+            img.alt = name;
+            img.onerror = () => {
+                img.removeAttribute("src");
+                img.style.background = "linear-gradient(135deg, #0f1419, #1d2630)";
+            };
+
+            const cap = document.createElement("div");
+            cap.className = "sample-name";
+            cap.textContent = name;
+
+            const check = document.createElement("span");
+            check.className = "check";
+            check.textContent = "\u2713";
+
+            card.appendChild(img);
+            card.appendChild(cap);
+            card.appendChild(check);
+
+            card.addEventListener("click", () => {
+                toggleSample(id, sample);
+                card.classList.toggle("selected", state.selectedSamples.has(id));
+                refreshPickedCount();
+            });
+
+            el.sampleGrid.appendChild(card);
+        }
+
+        refreshPickedCount();
+    }
+
+    function refreshPickedCount() {
+        const count = state.selectedSamples.size;
+        el.pickedCount.innerHTML = "Da chon <strong>" + count + "</strong> mau";
+        el.pickedCountFooter.innerHTML = "So mau da chon: <strong>" + count + "</strong>";
+    }
+
+    function collectConfig() {
+        return {
+            batchSize: Number(el.cfgBatchSize.value),
+            epochs: Number(el.cfgEpochs.value),
+            learningRate: Number(el.cfgLearningRate.value),
+            imageSize: Number(el.cfgImageSize.value),
+            earlyStoppingPatience: Number(el.cfgPatience.value),
+            deviceType: el.cfgDevice.value,
+            optimizer: el.cfgOptimizer.value
+        };
+    }
+
+    function buildTrainingPayload(cfg) {
+        return {
+            BatchSize: cfg.batchSize,
+            Epochs: cfg.epochs,
+            LearningRate: cfg.learningRate,
+            KichThuocAnh: cfg.imageSize,
+            LoaiThietBi: cfg.deviceType,
+            EarlyStoppingPatience: cfg.earlyStoppingPatience,
+            Optimizer: cfg.optimizer,
+            MoHinhHL: state.selectedModel,
+            PhienBanHL: state.selectedVersion,
+            DsMauHL: Array.from(state.selectedSamples.values())
+        };
+    }
+
+    function validateConfig(cfg) {
+        if (!Number.isFinite(cfg.batchSize) || cfg.batchSize <= 0) return "Batch Size khong hop le";
+        if (!Number.isFinite(cfg.epochs) || cfg.epochs <= 0) return "Epochs khong hop le";
+        if (!Number.isFinite(cfg.learningRate) || cfg.learningRate <= 0) return "Learning Rate khong hop le";
+        if (!Number.isFinite(cfg.imageSize) || cfg.imageSize <= 0) return "Kich thuoc anh khong hop le";
+        if (!Number.isFinite(cfg.earlyStoppingPatience) || cfg.earlyStoppingPatience < 0) return "Early Stopping Patience khong hop le";
+        return null;
+    }
+
+    function updateProgressUI() {
+        const status = state.latestStatus || {};
+        const result = state.latestResult || {};
+
+        let pct = pickNumber(status, ["progressPercent", "progress", "percent", "pct"]);
+        const currentEpoch = pickNumber(status, ["currentEpoch", "epoch", "current_epoch", "currentEpochIndex"]);
+        const totalEpoch = pickNumber(status, ["totalEpoch", "epochs", "total_epochs", "maxEpoch"]) || asNumber(el.cfgEpochs.value) || null;
+
+        if (pct !== null && pct <= 1) pct = pct * 100;
+        if (pct === null && currentEpoch !== null && totalEpoch) {
+            pct = (currentEpoch / totalEpoch) * 100;
+        }
+
+        const finalState = String(get(result, "TrangThai", ""));
+        if ((finalState === "COMPLETED" || finalState === "FAILED") && pct === null) {
+            pct = finalState === "COMPLETED" ? 100 : 0;
+        }
+
+        if (pct === null) pct = 0;
+        pct = Math.max(0, Math.min(100, pct));
+
+        const stepsDone = pickNumber(status, ["completedSteps", "currentStep", "step", "steps"]);
+        const stepsTotal = pickNumber(status, ["totalSteps", "maxSteps", "stepsTotal"]);
+        const eta = get(status, "eta", get(status, "etaText", get(status, "remainingTime", "-")));
+
+        el.progressPct.textContent = Math.round(pct) + "%";
+        el.progressBarFill.style.width = pct + "%";
+
+        if (currentEpoch !== null && totalEpoch !== null) {
+            el.progressEpoch.textContent = currentEpoch + " / " + totalEpoch + " epochs";
+        } else if (totalEpoch !== null) {
+            el.progressEpoch.textContent = "- / " + totalEpoch + " epochs";
+        } else {
+            el.progressEpoch.textContent = "0 / 0 epochs";
+        }
+
+        if (stepsDone !== null && stepsTotal !== null) {
+            el.progressSteps.textContent = "Steps: " + stepsDone + " / " + stepsTotal;
+        } else {
+            el.progressSteps.textContent = "Steps: -";
+        }
+
+        el.progressEta.textContent = "Thoi gian du kien: " + (eta || "-");
+    }
+
+    function updateTrainingMeta() {
+        const modelName = get(state.selectedModel || {}, "Ten", "-");
+        const versionName = get(state.selectedVersion || {}, "Ten", "-");
+        const status = state.latestResult ? get(state.latestResult, "TrangThai", "-") : "QUEUED";
+        const detail = state.latestStatus ? get(state.latestStatus, "detail", "Dang cho worker xu ly") : "Dang cho worker xu ly";
+
+        el.progressModelName.textContent = modelName || "Dang khoi tao training";
+        el.progressVersion.textContent = "Version: " + (versionName || "-");
+
+        el.trainingMeta.innerHTML = ""
+            + "<div><strong>Ten mo hinh:</strong> " + modelName + "</div>"
+            + "<div><strong>Phien ban:</strong> " + versionName + "</div>"
+            + "<div><strong>Thong tin HL ID:</strong> " + (state.trainingId || "-") + "</div>"
+            + "<div><strong>Tracking ID:</strong> " + state.trackingId + "</div>"
+            + "<div><strong>Trang thai:</strong> " + status + "</div>"
+            + "<div><strong>Chi tiet:</strong> " + detail + "</div>";
+
+        updateProgressUI();
+    }
+
+    function appendLogLine(message) {
+        const now = new Date().toISOString();
+        el.trainingLogs.textContent = el.trainingLogs.textContent + "\n[" + now + "] " + message;
+        el.trainingLogs.scrollTop = el.trainingLogs.scrollHeight;
+    }
+
+    async function pollTraining() {
+        if (!state.trackingId || !state.trainingId) return;
+
+        try {
+            const result = await api("GET", "/client2/trainings/" + state.trainingId + "/result");
+            state.latestResult = result;
+
+            const latest = await api("GET", "/client2/trainings/" + encodeURIComponent(state.trackingId) + "/status");
+            state.latestStatus = latest;
+            updateTrainingMeta();
+        } catch {
+            // Status may not exist immediately.
+        }
+
+        try {
+            const timelineResp = await api("GET", "/client2/trainings/" + encodeURIComponent(state.trackingId) + "/events");
+            const events = get(timelineResp, "events", []);
+            state.timeline = Array.isArray(events) ? events : [];
+            for (const event of state.timeline) {
+                const signature = [
+                    get(event, "updatedAt", ""),
+                    get(event, "state", ""),
+                    get(event, "detail", "")
+                ].join("|");
+                if (state.timelineSignatures.has(signature)) continue;
+                state.timelineSignatures.add(signature);
+                appendLogLine(get(event, "state", "UNKNOWN") + ": " + get(event, "detail", ""));
+            }
+        } catch (e) {
+            appendLogLine("Khong lay duoc timeline: " + e.message);
+        }
+
+        const finalState = state.latestResult ? String(get(state.latestResult, "TrangThai", "")) : "";
+        if (finalState === "COMPLETED" || finalState === "FAILED") {
+            stopPolling();
+            el.btnToResult.disabled = false;
+            updateProgressUI();
+            showToast("Huan luyen da ket thuc voi trang thai: " + finalState);
+        }
+    }
+
+    function startPolling() {
+        stopPolling();
+        state.pollTimer = setInterval(pollTraining, 2500);
+    }
+
+    function stopPolling() {
+        if (state.pollTimer) {
+            clearInterval(state.pollTimer);
+            state.pollTimer = null;
+        }
+    }
+
+    function readMetric(keys, fallback = "-") {
+        for (const key of keys) {
+            const value = get(state.latestResult || {}, key, undefined);
+            if (value !== undefined && value !== null && value !== "") return value;
+        }
+        return fallback;
+    }
+
+    function renderSummary() {
+        const modelName = get(state.selectedModel || {}, "Ten", "-");
+        const versionName = get(state.selectedVersion || {}, "Ten", "-");
+        const finalState = state.latestResult ? get(state.latestResult, "TrangThai", "UNKNOWN") : "UNKNOWN";
+        const finalDetail = state.latestStatus ? get(state.latestStatus, "detail", "") : "";
+        const eventCount = state.timeline.length;
+        const sampleCount = state.selectedSamples.size;
+
+        const accuracy = readMetric(["DoChinhXac", "Accuracy", "accuracy", "FinalAccuracy", "finalAccuracy"]);
+        const recall = readMetric(["DoNhay", "Recall", "recall", "FinalRecall", "finalRecall"]);
+        const runtime = readMetric(["ThoiGianChay", "RunTime", "Runtime", "Duration", "duration"]);
+
+        el.lbTenMoHinh.textContent = modelName;
+        el.lbTenPhienBanHL.textContent = versionName;
+        el.lbTrangThai.textContent = String(finalState || "-");
+        el.lbDoChinhXac.textContent = formatMaybePercent(accuracy);
+        el.lbDoNhay.textContent = formatMaybePercent(recall);
+        el.lbThoiGianChay.textContent = runtime === "-" ? "-" : String(runtime);
+
+        el.summary.innerHTML = ""
+            + "<div><strong>So mau da chon:</strong> " + sampleCount + "</div>"
+            + "<div><strong>Thong tin HL ID:</strong> " + (state.trainingId || "-") + "</div>"
+            + "<div><strong>Tracking ID:</strong> " + state.trackingId + "</div>"
+            + "<div><strong>Chi tiet:</strong> " + (finalDetail || "-") + "</div>"
+            + "<div><strong>So su kien timeline:</strong> " + eventCount + "</div>";
+    }
+
+    function resetForNewFlow() {
+        stopPolling();
+        state.timeline = [];
+        state.timelineSignatures.clear();
+        state.trainingId = null;
+        state.latestResult = null;
+        state.latestStatus = null;
+        state.trackingId = "";
+        el.btnToResult.disabled = true;
+        el.trainingLogs.textContent = "Dang cho bat dau huan luyen...";
+        el.progressPct.textContent = "0%";
+        el.progressEpoch.textContent = "0 / 0 epochs";
+        el.progressSteps.textContent = "Steps: -";
+        el.progressEta.textContent = "Thoi gian du kien: -";
+        el.progressBarFill.style.width = "0%";
+        updateResultActionButtons(false);
+        refreshPickedCount();
+    }
+
+    function bindNavigationButtons() {
+        document.querySelectorAll("button[data-prev]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const target = Number(btn.getAttribute("data-prev"));
+                goStep(target);
+            });
+        });
+    }
+
+    async function initEvents() {
+        document.getElementById("btnStartFlow").addEventListener("click", async () => {
+            try {
+                if (state.models.length === 0) await loadModels();
+                goStep(2);
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        });
+
+        el.modelSelect.addEventListener("change", syncSelectedModel);
+        el.versionSelect.addEventListener("change", syncSelectedVersion);
+
+        document.getElementById("btnToStep3").addEventListener("click", async () => {
+            if (!state.selectedModel || !state.selectedVersion) {
+                showToast("Vui long chon mo hinh va phien ban.", true);
+                return;
+            }
+
+            try {
+                if (state.datasets.length === 0) await loadDatasets();
+                goStep(3);
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        });
+
+        el.datasetSelect.addEventListener("change", syncSelectedDataset);
+
+        document.getElementById("btnPickAll").addEventListener("click", () => {
+            const samples = get(state.selectedDataset || {}, "DsMau", []);
+            for (const sample of samples) {
+                const id = Number(get(sample, "Id", -1));
+                state.selectedSamples.set(id, sample);
+            }
+            renderSamples();
+        });
+
+        document.getElementById("btnClearPick").addEventListener("click", () => {
+            const samples = get(state.selectedDataset || {}, "DsMau", []);
+            for (const sample of samples) {
+                const id = Number(get(sample, "Id", -1));
+                state.selectedSamples.delete(id);
+            }
+            renderSamples();
+        });
+
+        document.getElementById("btnToStep4").addEventListener("click", () => {
+            if (state.selectedSamples.size === 0) {
+                showToast("Vui long chon it nhat 1 mau.", true);
+                return;
+            }
+
+            goStep(4);
+        });
+
+        el.cfgPatience.addEventListener("input", () => {
+            el.patienceLabel.textContent = el.cfgPatience.value;
+        });
+
+        document.getElementById("btnStartTraining").addEventListener("click", async () => {
+            const cfg = collectConfig();
+            const err = validateConfig(cfg);
+            if (err) {
+                showToast(err, true);
+                return;
+            }
+
+            resetForNewFlow();
+            state.config = cfg;
+            const payload = buildTrainingPayload(cfg);
+            if (!Array.isArray(payload.DsMauHL) || payload.DsMauHL.length === 0) {
+                showToast("Vui long chon it nhat 1 mau truoc khi huan luyen.", true);
+                return;
+            }
+
+            try {
+                const created = await api("POST", "/client2/trainings/create", payload);
+                state.trainingId = Number(get(created, "Id", 0));
+                if (!state.trainingId) {
+                    throw new Error("Khong nhan duoc ID thong tin huan luyen");
+                }
+
+                state.trackingId = String(get(created, "TrackingId", state.trainingId));
+                await api("POST", "/client2/trainings/" + state.trainingId + "/start");
+
+                goStep(5);
+                updateTrainingMeta();
+                appendLogLine("Gui yeu cau huan luyen thanh cong. Dang theo doi trang thai...");
+                await pollTraining();
+                startPolling();
+            } catch (e) {
+                showToast("Khong the bat dau huan luyen: " + e.message, true);
+            }
+        });
+
+        document.getElementById("btnCancelTrain").addEventListener("click", () => {
+            stopPolling();
+            showToast("Da dung theo doi huan luyen.");
+            goStep(4);
+        });
+
+        el.btnToResult.addEventListener("click", () => {
+            renderSummary();
+            goStep(6);
+        });
+
+        el.btnSaveVersion.addEventListener("click", () => {
+            if (!state.trainingId) {
+                showToast("Chua co thong tin huan luyen de luu phien ban.", true);
+                return;
+            }
+
+            api("POST", "/client2/trainings/" + state.trainingId + "/save-version")
+                .then(versionId => {
+                    showToast("Da luu phien ban moi voi ID: " + versionId);
+                    updateResultActionButtons(true);
+                })
+                .catch(e => {
+                    showToast("Khong the luu phien ban: " + e.message, true);
+                });
+        });
+
+        el.btnSkipSave.addEventListener("click", () => {
+            showToast("Ban da chon khong luu ket qua huan luyen.");
+            updateResultActionButtons(true);
+        });
+
+        el.btnBackManage.addEventListener("click", () => {
+            goStep(1);
+        });
+
+        bindNavigationButtons();
+        updateResultActionButtons(false);
+    }
+
+    buildStepper();
+    refreshPickedCount();
+    initEvents();
+</script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: api-gateway
+  config:
+    import: "${SPRING_CONFIG_IMPORT:optional:configserver:http://localhost:8888}"
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 200MB
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: api-mo-hinh
+              uri: lb://AIMODEL-SERVICE
+              predicates:
+                - Path=/api/mo-hinh,/api/mo-hinh/**
+            - id: api-tap-du-lieu
+              uri: lb://DATASET-SERVICE
+              predicates:
+                - Path=/api/tap-du-lieu,/api/tap-du-lieu/**
+            - id: api-huan-luyen
+              uri: lb://TRAINING-ORCHESTRATOR-SERVICE
+              predicates:
+                - Path=/api/huan-luyen/**
+            - id: api-trainings
+              uri: lb://TRAINING-ORCHESTRATOR-SERVICE
+              predicates:
+                - Path=/api/trainings/**
+            - id: static-uploads
+              uri: lb://DATASET-SERVICE
+              predicates:
+                - Path=/uploads/**
+            - id: training-orchestrator
+              uri: lb://TRAINING-ORCHESTRATOR-SERVICE
+              predicates:
+                - Path=/training-orchestrator/**
+              filters:
+                - RewritePath=/training-orchestrator/(?<segment>.*), /${segment}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
+
+server:
+  port: 8081
+  tomcat:
+    max-http-form-post-size: 200MB
+    max-swallow-size: 200MB

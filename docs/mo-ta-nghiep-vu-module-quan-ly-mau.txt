@@ -1,0 +1,59 @@
+﻿1.3 Các chức năng hoạt động như thế nào?
+1.3.1 Quản lý mẫu huấn luyện (Dataset)
+Quản lý sau khi đăng nhập thành công vào hệ thống thực hiện:
+	Từ trang quản lý => Ấn "Quản lý mẫu" => Điều hướng sang trang quản lý mẫu riêng.
+
+Luồng 0 - Mở trang quản lý mẫu:
+	Khi màn hình mở, hệ thống gọi loadDatasets().
+	Hệ thống gọi API getDatasets() để tải danh sách dataset hiện có.
+	Kết quả:
+		Nếu API lỗi hoặc dữ liệu rỗng => Hiển thị "Không tải được dataset: ..." và chưa có dataset để thao tác.
+		Nếu API thành công => Hiển thị danh sách dataset và tự chọn dataset đầu tiên.
+
+Luồng 1 - Tạo dataset mới:
+	Quản lý nhập Tên dataset => Chọn ảnh mẫu => Chọn file label .txt tương ứng => Ấn "Tạo dataset".
+	Điều kiện cho phép bấm nút:
+		Tên dataset không rỗng.
+		Số ảnh đã chọn > 0.
+		Phải có đủ file label .txt cho toàn bộ ảnh đã chọn (map theo cùng tên file, khác phần mở rộng).
+		Có thể chọn nhiều label 1 lần hoặc tải lên từng file label 1, hệ thống cộng dồn danh sách label theo tên file.
+		Không ở trạng thái đang tạo.
+	Hệ thống gọi API createDataset(tenDataset, images, labels).
+	Kết quả:
+		Nếu thành công => Hiển thị "Đã tạo dataset mới thành công." => Reset form tạo => Tải lại danh sách dataset và ưu tiên chọn dataset vừa tạo.
+		Nếu thất bại => Hiển thị "Không tạo được dataset: ..." => Giữ dữ liệu form để người dùng chỉnh và thử lại.
+
+Luồng 2 - Cập nhật dataset đang chọn:
+	Quản lý chọn dataset => Có thể thực hiện một hoặc nhiều thao tác:
+		Đổi tên dataset.
+		Thêm ảnh mới.
+		Thêm label cho ảnh mới.
+		Đánh dấu xóa mẫu cũ.
+	Điều kiện cho phép bấm "Lưu cập nhật dataset":
+		Có dataset đang chọn.
+		Và có thay đổi hợp lệ (đổi tên hoặc thêm ảnh hoặc có mẫu đánh dấu xóa).
+		Nếu có thêm ảnh mới thì bắt buộc có đủ label .txt tương ứng cho toàn bộ ảnh thêm mới (map theo cùng tên file).
+		Label cho ảnh thêm mới cũng có thể tải nhiều file 1 lần hoặc tải từng file 1, hệ thống cộng dồn theo tên file.
+		Và không ở trạng thái đang cập nhật.
+	Hệ thống gọi API updateDataset(tenDataset, addImages, labels, removeSampleIds).
+	Kết quả:
+		Nếu thành công => Hiển thị "Đã cập nhật dataset thành công." => Reset form cập nhật => Tải lại dataset hiện tại.
+		Nếu thất bại => Hiển thị "Không cập nhật được dataset: ..." => Giữ trạng thái để người dùng chỉnh lại.
+
+Luồng 3 - Đánh dấu xóa mẫu trong lưới ảnh:
+	Quản lý ấn "Đánh dấu xóa" trên một mẫu => Mẫu chuyển trạng thái removing.
+	Nếu ấn lại "Bỏ đánh dấu xóa" => Mẫu trở về trạng thái bình thường.
+	Lưu ý:
+		Đây là đánh dấu tạm thời trên UI.
+		Xóa thật sự chỉ xảy ra khi ấn "Lưu cập nhật dataset" ở Luồng 2.
+
+Luồng 4 - Xóa toàn bộ dataset:
+	Quản lý chọn dataset => Ấn "Xóa dataset" => Hệ thống mở hộp xác nhận window.confirm.
+	Nếu người dùng chọn Cancel => Kết thúc, không xóa.
+	Nếu người dùng chọn OK => Gọi API deleteDataset(datasetId).
+	Kết quả:
+		Nếu thành công => Hiển thị "Đã xóa dataset thành công." => Tải lại danh sách dataset.
+		Nếu thất bại => Hiển thị "Không xóa được dataset: ...".
+
+Luồng ngoại lệ đúng theo code:
+	Sau các thao tác tạo/cập nhật/xóa thành công, hệ thống luôn gọi lại loadDatasets() để đồng bộ dữ liệu mới nhất từ server.

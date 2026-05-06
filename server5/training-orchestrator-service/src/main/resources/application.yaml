@@ -1,0 +1,50 @@
+spring:
+    application:
+        name: training-orchestrator-service
+    config:
+        import: "${SPRING_CONFIG_IMPORT:optional:configserver:http://localhost:8888}"
+    flyway:
+        connect-retries: 30
+    rabbitmq:
+        host: localhost
+        port: 5672
+        username: guest
+        password: guest
+
+app:
+    training:
+        version-name:
+            timezone: Asia/Ho_Chi_Minh
+        artifact:
+            temp-model-dir: ../ai-training-service/runtime/training/outputs
+            aimodel-model-dir: ../aimodel-service/models
+            aimodel-public-prefix: /models
+        admission:
+            max-concurrent: 1
+            max-queued: 10
+    rabbitmq:
+        exchange:
+            training: training.exchange
+        queue:
+            training-request: training.request.queue
+            training-status: training.status.queue
+        queue-max-length:
+            training-request: 10
+        routing-key:
+            training-request: training.request
+            training-status: training.status
+    # SQLite datasource (shadow cache, tuần 1-3)
+    datasource:
+        sqlite:
+            url: jdbc:sqlite:./data/training-orchestrator.db
+            username: ""
+            password: ""
+            driverClassName: org.sqlite.JDBC
+            hikari:
+                pool-size: 5
+                connection-timeout: 20000
+    # Migration strategy
+    migration:
+        sqlite-enabled: true
+        dual-write-enabled: false  # Enable during tuần 2
+        fallback-to-postgres: true # Fallback if SQLite fails

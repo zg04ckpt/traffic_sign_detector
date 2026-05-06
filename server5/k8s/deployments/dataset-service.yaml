@@ -1,0 +1,32 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {}
+  name: dataset-service
+  namespace: server5
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dataset-service
+  template:
+    metadata:
+      labels:
+        app: dataset-service
+    spec:
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: server5-common-config
+        image: server5/dataset-service:local
+        imagePullPolicy: IfNotPresent
+        name: dataset-service
+        ports:
+        - containerPort: 8083
+        volumeMounts:
+        - mountPath: /data/uploads
+          name: uploads
+      volumes:
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: server5-uploads-pvc

@@ -1,0 +1,36 @@
+server:
+    port: 8085
+spring:
+    rabbitmq:
+        listener:
+            simple:
+                concurrency: ${app.training.execution.max-concurrent:1}
+                max-concurrency: ${app.training.execution.max-concurrent:1}
+                prefetch: 1
+        host: rabbitmq
+        port: 5672
+        username: server5
+        password: server5pass
+
+app:
+    training:
+        execution:
+            max-concurrent: 1
+    rabbitmq:
+        exchange:
+            training: training.exchange
+        queue:
+            training-request: training.request.queue
+            training-status: training.status.queue
+        queue-max-length:
+            training-request: 10
+        routing-key:
+            training-request: training.request
+            training-status: training.status
+
+training:
+    runtime-dir: runtime/training
+    uploads-dir: ../dataset-service/uploads
+    model-store-dir: runtime/training
+    model-output-dir: runtime/training/outputs
+    model-artifact-public-prefix: /runtime/training/outputs
