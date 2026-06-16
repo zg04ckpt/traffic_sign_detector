@@ -1,0 +1,19 @@
+spring:
+    application:
+        name: dataset-service
+    config:
+        import: "${SPRING_CONFIG_IMPORT:optional:configserver:http://localhost:8888}"
+    servlet:
+        multipart:
+            max-file-size: 100MB
+            max-request-size: 200MB
+
+server:
+    tomcat:
+        max-http-form-post-size: 200MB
+        max-swallow-size: 200MB
+
+logging:
+    level:
+        root: INFO
+        com.trafficsigndetector.datasetservice: DEBUG

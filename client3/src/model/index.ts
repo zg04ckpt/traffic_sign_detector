@@ -1,0 +1,8 @@
+export type { LoaiBien } from '@/model/LoaiBien'
+export type { KhungNhanDang } from '@/model/KhungNhanDang'
+export type { Mau } from '@/model/Mau'
+export type { MauHL } from '@/model/MauHL'
+export type { PhienBan } from '@/model/PhienBan'
+export type { MoHinh } from '@/model/MoHinh'
+export type { TapDuLieu } from '@/model/TapDuLieu'
+export type { ThongTinHL } from '@/model/ThongTinHL'

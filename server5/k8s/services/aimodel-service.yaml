@@ -1,0 +1,12 @@
+﻿apiVersion: v1
+kind: Service
+metadata:
+  annotations: {}
+  name: aimodel-service
+  namespace: server5
+spec:
+  ports:
+  - port: 8082
+    targetPort: 8082
+  selector:
+    app: aimodel-service

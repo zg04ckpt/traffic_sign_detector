@@ -1,0 +1,45 @@
+server:
+    port: 8084
+
+spring:
+    datasource:
+        url: jdbc:postgresql://postgres:5432/training_db
+        username: server5
+        password: server5pass
+    flyway:
+        enabled: true
+        connect-retries: 30
+    rabbitmq:
+        host: rabbitmq
+        port: 5672
+        username: server5
+        password: server5pass
+
+eureka:
+    client:
+        service-url:
+            defaultZone: http://discovery-server:8761/eureka/
+
+app:
+    training:
+        artifact:
+            temp-model-dir: /data/runtime/training/outputs
+            aimodel-model-dir: /data/aimodel
+            aimodel-public-prefix: /models
+        admission:
+            max-concurrent: 1
+            max-queued: 10
+    rabbitmq:
+        exchange:
+            training: training.exchange
+        queue:
+            training-request: training.request.queue
+            training-status: training.status.queue
+        queue-max-length:
+            training-request: 10
+        routing-key:
+            training-request: training.request
+            training-status: training.status
+
+services:
+    aimodel-base-url: http://aimodel-service:8082

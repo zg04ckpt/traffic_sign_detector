@@ -1,0 +1,5 @@
+# Profile "local" — Eureka registry on localhost so lb://DATASET-SERVICE resolves.
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/

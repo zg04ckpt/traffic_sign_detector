@@ -1,0 +1,17 @@
+# Profile "local": Postgres + RabbitMQ + Eureka on localhost (typical IDE dev).
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/training_db
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+services:
+  aimodel-base-url: http://localhost:8082

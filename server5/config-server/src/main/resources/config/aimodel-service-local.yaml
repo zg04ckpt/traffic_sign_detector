@@ -1,0 +1,9 @@
+# Profile "local" — see dataset-service-local.yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/aimodel_db
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/

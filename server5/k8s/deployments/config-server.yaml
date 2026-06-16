@@ -1,0 +1,27 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {}
+  name: config-server
+  namespace: server5
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: config-server
+  template:
+    metadata:
+      labels:
+        app: config-server
+    spec:
+      containers:
+      - env:
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: http://discovery-server:8761/eureka/
+        - name: SPRING_CLOUD_CONFIG_ENABLED
+          value: "false"
+        image: server5/config-server:local
+        imagePullPolicy: IfNotPresent
+        name: config-server
+        ports:
+        - containerPort: 8888

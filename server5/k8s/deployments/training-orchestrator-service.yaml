@@ -1,0 +1,39 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {}
+  name: training-orchestrator-service
+  namespace: server5
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: training-orchestrator-service
+  template:
+    metadata:
+      labels:
+        app: training-orchestrator-service
+    spec:
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: server5-common-config
+        image: server5/training-orchestrator-service:local
+        imagePullPolicy: IfNotPresent
+        name: training-orchestrator-service
+        ports:
+        - containerPort: 8090
+        volumeMounts:
+        - mountPath: /data/runtime/training/outputs
+          name: training-artifact
+        - mountPath: /data/aimodel
+          name: training-artifact
+        - mountPath: /data/uploads
+          name: uploads
+      volumes:
+      - name: training-artifact
+        persistentVolumeClaim:
+          claimName: server5-training-artifact-pvc
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: server5-uploads-pvc

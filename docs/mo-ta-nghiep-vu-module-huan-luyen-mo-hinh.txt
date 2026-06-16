@@ -1,0 +1,84 @@
+﻿1.3 Các chức năng hoạt động như thế nào?
+1.3.2 Huấn luyện mô hình nhận diện biển báo
+Quản lý sau khi đăng nhập thành công vào hệ thống => Ấn "Bắt đầu huấn luyện" => Hệ thống chạy đúng chuỗi màn hình: trang chọn mô hình và phiên bản => trang chọn mẫu dữ liệu huấn luyện => trang cấu hình tham số => trang theo dõi huấn luyện => trang kết quả huấn luyện.
+
+Bước 1 - Chọn mô hình và phiên bản:
+	Khi màn hình mở, hệ thống tự gọi API getModels().
+	Nếu API lỗi hoặc rỗng => Hiển thị lỗi "Không tải được danh sách mô hình: ..." => Không thể đi tiếp.
+	Nếu API thành công => Hệ thống tự chọn model đầu tiên và version đầu tiên.
+	Quản lý có thể đổi model/version qua dropdown.
+	Khi ấn "Tiếp tục":
+		Nếu model hoặc version chưa hợp lệ => Hiển thị lỗi "Vui lòng chọn mô hình và phiên bản hợp lệ." => Ở lại màn hình.
+		Nếu hợp lệ => Lưu selectedModel + selectedVersion vào trainingState/sessionStorage => Điều hướng sang trang chọn mẫu dữ liệu huấn luyện.
+
+Bước 2 - Chọn dữ liệu huấn luyện:
+	Khi màn hình mở, hệ thống gọi loadDatasets().
+	Điều kiện bắt buộc đúng theo code:
+		Nếu thiếu selectedModel hoặc selectedVersion => Hiển thị lỗi "Vui lòng chọn mô hình trước khi chọn mẫu." => Không tải dataset.
+		Nếu đủ điều kiện => Gọi API getDatasets() và hiển thị danh sách dataset.
+	Quản lý thực hiện:
+		Chọn dataset hiện có bằng combobox.
+		Chọn sample train bằng "Chọn train", "Chọn tất cả", "Bỏ chọn".
+		Hệ thống chỉ cho phép chọn dữ liệu; không có thao tác tạo/sửa/xóa dataset tại màn này.
+	Khi ấn "Tiếp tục":
+		Nút chỉ enabled khi selectedCount > 0.
+		Hệ thống lưu selectedDatasetId + selectedSamples vào trainingState/sessionStorage => Điều hướng sang trang cấu hình tham số.
+
+Bước 3 - Cấu hình tham số:
+	Giá trị mặc định đúng theo code:
+		batchSize = 256.
+		epochs = 2.
+		learningRate = 0.01.
+		imageSize = 416.
+		earlyStoppingPatience = 5.
+		deviceType = cpu.
+		optimizer = Adam.
+	Điều kiện cho phép ấn "Tiếp tục":
+		batchSize > 0, epochs > 0, learningRate > 0, imageSize > 0.
+		earlyStoppingPatience >= 0.
+		deviceType và optimizer không rỗng.
+	Khi ấn "Tiếp tục" hợp lệ => Hệ thống lưu config vào trainingState/sessionStorage => Điều hướng sang trang theo dõi huấn luyện.
+
+Bước 4 - Khởi tạo và theo dõi huấn luyện:
+	Khi onMounted, hệ thống tự chạy startTrainingFlow().
+	Kiểm tra đầu vào:
+		Nếu thiếu model/version hoặc selectedSamples rỗng => Hiển thị lỗi "Thiếu dữ liệu huấn luyện..." + hiện nút "Quay lại chọn dữ liệu" => Không tạo phiên.
+		Nếu đủ dữ liệu => Tạo payload từ config + model/version + samples => Gọi API createTraining().
+	Khi createTraining thành công:
+		Lưu trainingId.
+		Lưu trackingId = TrackingId nếu có, nếu không lấy Id.
+		Gọi API startTrainingSession(trainingId).
+		Ghi log "Training started...".
+	Hệ thống polling mỗi 2.5 giây qua 3 API:
+		getTrainingResult(trainingId).
+		getLatestStatus(trackingId).
+		getTimeline(trackingId).
+	Trong quá trình polling:
+		Cập nhật currentEpoch và progress bar.
+		Append log mới chưa trùng.
+		Nếu state là COMPLETED hoặc FAILED => dừng timer, khóa phiên theo trạng thái tương ứng.
+	Nút "Dừng/Tiếp tục" trong code hiện tại chỉ đổi cờ isPaused ở UI:
+		Khi isPaused = true => bỏ qua pollTraining tạm thời.
+		Không có API pause/resume gửi xuống backend.
+	Khi isCompleted = true => Hiện nút "Tiếp tục" để sang trang kết quả huấn luyện.
+
+Bước 5 - Xem kết quả và lưu phiên bản:
+	Màn hình hiển thị dữ liệu từ trainingState.latestResult/latestStatus:
+		Tên mô hình, tên phiên bản, trạng thái, độ chính xác, độ nhạy, thời gian chạy.
+	Quản lý chọn một trong 2 hành động:
+		"Lưu phiên bản mới":
+			Nếu thiếu trainingId => Báo lỗi "Không có phiên huấn luyện để lưu phiên bản.".
+			Nếu có trainingId => Gọi API saveVersion(trainingId).
+			Nếu thành công => Hiển thị thông báo thành công + actionCompleted = true.
+			Nếu thất bại => Hiển thị lỗi lưu phiên bản.
+		"Không lưu":
+			Hiển thị thông báo bỏ lưu + actionCompleted = true.
+	Sau khi actionCompleted = true => Ẩn 2 nút lưu/không lưu, chỉ còn nút "Quay về trang quản lý".
+
+Ràng buộc đúng theo code triển khai:
+	Phải có model + version trước khi load dữ liệu mẫu ở trang chọn mẫu huấn luyện.
+	Phải có ít nhất 1 sample được chọn để đi từ trang chọn mẫu sang trang cấu hình.
+	Trang chọn mẫu chỉ phục vụ chọn mẫu huấn luyện; quản lý dataset nằm ở trang quản lý mẫu riêng.
+	Phải có config hợp lệ theo điều kiện canContinue ở trang cấu hình mới đi được trang huấn luyện.
+	Mỗi phiên train dùng trainingId và trackingId để theo dõi trạng thái/polling.
+	Lưu phiên bản sử dụng trainingId của phiên hiện tại.

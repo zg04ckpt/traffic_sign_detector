@@ -1,0 +1,25 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {}
+  name: discovery-server
+  namespace: server5
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: discovery-server
+  template:
+    metadata:
+      labels:
+        app: discovery-server
+    spec:
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: server5-common-config
+        image: server5/discovery-server:local
+        imagePullPolicy: IfNotPresent
+        name: discovery-server
+        ports:
+        - containerPort: 8761

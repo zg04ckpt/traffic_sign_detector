@@ -1,0 +1,10 @@
+# Profile "local": run services on host machine (Postgres + Eureka on localhost).
+# Start dataset-service with: --spring.profiles.active=local
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/dataset_db
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/

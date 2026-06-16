@@ -1,0 +1,31 @@
+server:
+  port: 8083
+  tomcat:
+    max-http-form-post-size: 200MB
+    max-swallow-size: 200MB
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 200MB
+  datasource:
+    url: jdbc:postgresql://postgres:5432/dataset_db
+    username: server5
+    password: server5pass
+  flyway:
+    enabled: true
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://discovery-server:8761/eureka/
+
+app:
+  storage:
+    upload-dir: dataset-service/uploads
+
+logging:
+  level:
+    root: INFO
+    com.trafficsigndetector.datasetservice: DEBUG
