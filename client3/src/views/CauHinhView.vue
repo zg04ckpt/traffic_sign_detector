@@ -25,6 +25,31 @@ const canContinue = computed(() => {
     )
 })
 
+const selectedSampleDisplay = computed(() => {
+    if (trainingState.selectedSampleCache.length > 0) {
+        return trainingState.selectedSampleCache
+    }
+
+    return trainingState.selectedSamples.map(sample => ({
+        sampleId: typeof sample.Id === 'number' ? sample.Id : null,
+        sampleName: sample.DuongDanAnh
+            ? sample.DuongDanAnh.split('/').pop()?.split('\\').pop() || `Mẫu #${sample.Id ?? 'N/A'}`
+            : `Mẫu #${sample.Id ?? 'N/A'}`,
+        datasetId: trainingState.selectedDatasetId ?? null,
+        datasetName: trainingState.selectedDatasetId ? `Dataset #${trainingState.selectedDatasetId}` : 'Không xác định',
+    }))
+})
+
+function removeSelectedSample(sampleId: number | null) {
+    if (sampleId === null) {
+        return
+    }
+
+    trainingState.selectedSamples = trainingState.selectedSamples.filter(sample => sample.Id !== sampleId)
+    trainingState.selectedSampleCache = trainingState.selectedSampleCache.filter(item => item.sampleId !== sampleId)
+    persistTrainingSelection()
+}
+
 function onContinue() {
     if (!canContinue.value) return
 
@@ -88,6 +113,40 @@ function onContinue() {
                 <option value="SGD">SGD</option>
                 <option value="RMSprop">RMSprop</option>
             </select>
+        </div>
+
+        <div class="sample-summary mt-4 mb-5">
+            <h5>Danh sách mẫu đã chọn</h5>
+            <div v-if="selectedSampleDisplay.length > 0" class="table-responsive">
+                <table class="table table-bordered table-sm">
+                    <thead>
+                        <tr>
+                            <th>ID mẫu</th>
+                            <th>Tên mẫu</th>
+                            <th>Tập dữ liệu</th>
+                            <th>Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(item, index) in selectedSampleDisplay" :key="`${item.sampleId ?? 'sample'}-${index}`">
+                            <td>{{ item.sampleId ?? '-' }}</td>
+                            <td>{{ item.sampleName }}</td>
+                            <td>{{ item.datasetName }}</td>
+                            <td class="text-center">
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline-danger"
+                                    :disabled="item.sampleId === null"
+                                    @click="removeSelectedSample(item.sampleId)"
+                                >
+                                    X
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p v-else class="text-muted mb-0">Chưa có mẫu nào được chọn.</p>
         </div>
 
         <div class="footerAction">

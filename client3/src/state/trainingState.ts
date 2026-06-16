@@ -33,11 +33,19 @@ export interface TrainingStatusEvent {
   logLine?: string
 }
 
+export interface SelectedSampleCacheItem {
+  sampleId: number | null
+  sampleName: string
+  datasetId: number | null
+  datasetName: string
+}
+
 interface PersistedTrainingSelection {
   selectedModel: MoHinh | null
   selectedVersion: PhienBan | null
   selectedDatasetId: number | null
   selectedSamples: Mau[]
+  selectedSampleCache: SelectedSampleCacheItem[]
   config: TrainingConfig
 }
 
@@ -59,6 +67,7 @@ function loadPersistedSelection(): PersistedTrainingSelection {
     selectedVersion: null,
     selectedDatasetId: null,
     selectedSamples: [],
+    selectedSampleCache: [],
     config: defaultConfig(),
   }
 
@@ -71,11 +80,21 @@ function loadPersistedSelection(): PersistedTrainingSelection {
     const parsed = JSON.parse(raw) as Partial<PersistedTrainingSelection>
     const config = parsed.config ?? fallback.config
 
+    const selectedSampleCache = Array.isArray(parsed.selectedSampleCache)
+      ? parsed.selectedSampleCache.map(item => ({
+        sampleId: typeof item?.sampleId === 'number' ? item.sampleId : null,
+        sampleName: String(item?.sampleName ?? ''),
+        datasetId: typeof item?.datasetId === 'number' ? item.datasetId : null,
+        datasetName: String(item?.datasetName ?? 'Không xác định'),
+      }))
+      : []
+
     return {
       selectedModel: parsed.selectedModel ?? null,
       selectedVersion: parsed.selectedVersion ?? null,
       selectedDatasetId: typeof parsed.selectedDatasetId === 'number' ? parsed.selectedDatasetId : null,
       selectedSamples: Array.isArray(parsed.selectedSamples) ? parsed.selectedSamples : [],
+      selectedSampleCache,
       config: {
         batchSize: Number(config.batchSize) > 0 ? Number(config.batchSize) : fallback.config.batchSize,
         epochs: Number(config.epochs) > 0 ? Number(config.epochs) : fallback.config.epochs,
@@ -100,6 +119,7 @@ export const trainingState = reactive({
   selectedVersion: persisted.selectedVersion,
   selectedDatasetId: persisted.selectedDatasetId as number | null,
   selectedSamples: persisted.selectedSamples,
+  selectedSampleCache: persisted.selectedSampleCache as SelectedSampleCacheItem[],
   config: persisted.config,
   trainingId: null as number | null,
   trackingId: '',
@@ -114,6 +134,7 @@ export function persistTrainingSelection(): void {
     selectedVersion: trainingState.selectedVersion,
     selectedDatasetId: trainingState.selectedDatasetId,
     selectedSamples: trainingState.selectedSamples,
+    selectedSampleCache: trainingState.selectedSampleCache,
     config: trainingState.config,
   }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getDatasets } from '@/services/trainingApi'
 import type { Mau, TapDuLieu } from '@/model'
@@ -23,12 +23,83 @@ const currentImages = computed(() => {
 const selectedCount = computed(() => Object.keys(selectedImages.value).length)
 const canContinue = computed(() => selectedCount.value > 0)
 const hasCurrentImages = computed(() => currentImages.value.length > 0)
+const selectedSampleDisplay = computed(() => {
+  if (trainingState.selectedSampleCache.length > 0) {
+    return trainingState.selectedSampleCache
+  }
+
+  return Object.values(selectedImages.value).map(sample => ({
+    sampleId: typeof sample.Id === 'number' ? sample.Id : null,
+    sampleName: sample.DuongDanAnh
+      ? sample.DuongDanAnh.split('/').pop()?.split('\\').pop() || `Mẫu #${sample.Id ?? 'N/A'}`
+      : `Mẫu #${sample.Id ?? 'N/A'}`,
+    datasetId: trainingState.selectedDatasetId ?? null,
+    datasetName: trainingState.selectedDatasetId ? `Dataset #${trainingState.selectedDatasetId}` : 'Không xác định',
+  }))
+})
+
+function buildDatasetBySampleId() {
+  const datasetBySampleId = new Map<number, { datasetId: number; datasetName: string }>()
+  for (const dataset of datasets.value) {
+    for (const sample of dataset.DsMau ?? []) {
+      if (typeof sample.Id === 'number') {
+        datasetBySampleId.set(sample.Id, {
+          datasetId: dataset.Id,
+          datasetName: dataset.Ten,
+        })
+      }
+    }
+  }
+  return datasetBySampleId
+}
+
+function buildSampleName(sample: Mau, sampleId: number | null) {
+  return sample.DuongDanAnh
+    ? sample.DuongDanAnh.split('/').pop()?.split('\\').pop() || `Mẫu #${sampleId ?? 'N/A'}`
+    : `Mẫu #${sampleId ?? 'N/A'}`
+}
+
+function syncSelectionToGlobalState() {
+  const sampleList = Object.values(selectedImages.value)
+  const datasetBySampleId = buildDatasetBySampleId()
+
+  trainingState.selectedDatasetId = selectedDataset.value ?? null
+  trainingState.selectedSamples = sampleList
+  trainingState.selectedSampleCache = sampleList.map(sample => {
+    const sampleId = typeof sample.Id === 'number' ? sample.Id : null
+    const relation = sampleId !== null ? datasetBySampleId.get(sampleId) : undefined
+
+    return {
+      sampleId,
+      sampleName: buildSampleName(sample, sampleId),
+      datasetId: relation?.datasetId ?? null,
+      datasetName: relation?.datasetName ?? 'Không xác định',
+    }
+  })
+
+  persistTrainingSelection()
+}
+
+function hydrateSelectionFromTrainingState() {
+  const next: Record<number, Mau> = {}
+  for (const sample of trainingState.selectedSamples) {
+    if (typeof sample.Id === 'number') {
+      next[sample.Id] = sample
+    }
+  }
+  selectedImages.value = next
+  selectedDataset.value = trainingState.selectedDatasetId ?? null
+}
 
 function isSelected(imageId: number) {
   return selectedImages.value[imageId] !== undefined
 }
 
 function toggleImage(image: Mau) {
+  if (typeof image.Id !== 'number') {
+    return
+  }
+
   const next = { ...selectedImages.value }
   if (next[image.Id]) {
     delete next[image.Id]
@@ -36,6 +107,7 @@ function toggleImage(image: Mau) {
     next[image.Id] = image
   }
   selectedImages.value = next
+  syncSelectionToGlobalState()
 }
 
 function selectAllCurrentImages() {
@@ -45,9 +117,12 @@ function selectAllCurrentImages() {
 
   const next = { ...selectedImages.value }
   for (const image of currentImages.value) {
-    next[image.Id] = image
+    if (typeof image.Id === 'number') {
+      next[image.Id] = image
+    }
   }
   selectedImages.value = next
+  syncSelectionToGlobalState()
 }
 
 function clearAllCurrentImages() {
@@ -57,21 +132,29 @@ function clearAllCurrentImages() {
 
   const next = { ...selectedImages.value }
   for (const image of currentImages.value) {
-    delete next[image.Id]
+    if (typeof image.Id === 'number') {
+      delete next[image.Id]
+    }
   }
   selectedImages.value = next
+  syncSelectionToGlobalState()
 }
 
 function reconcileSelectedSamples() {
   const allSamples = new Map<number, Mau>()
   for (const dataset of datasets.value) {
     for (const sample of dataset.DsMau ?? []) {
-      allSamples.set(sample.Id, sample)
+      if (typeof sample.Id === 'number') {
+        allSamples.set(sample.Id, sample)
+      }
     }
   }
 
   const next: Record<number, Mau> = {}
   for (const value of Object.values(selectedImages.value)) {
+    if (typeof value.Id !== 'number') {
+      continue
+    }
     const match = allSamples.get(value.Id)
     if (match) {
       next[value.Id] = match
@@ -126,20 +209,34 @@ async function loadDatasets(preferredDatasetId: number | null = null) {
   }
 
   reconcileSelectedSamples()
+  syncSelectionToGlobalState()
   loading.value = false
 }
 
 function onContinue() {
   if (!canContinue.value) return
-
-  trainingState.selectedDatasetId = selectedDataset.value
-  trainingState.selectedSamples = Object.values(selectedImages.value)
-  persistTrainingSelection()
+  syncSelectionToGlobalState()
   router.push('/cau-hinh')
 }
 
+function removeSelectedSample(sampleId: number | null) {
+  if (sampleId === null) {
+    return
+  }
+
+  const next = { ...selectedImages.value }
+  delete next[sampleId]
+  selectedImages.value = next
+  syncSelectionToGlobalState()
+}
+
 onMounted(() => {
+  hydrateSelectionFromTrainingState()
   loadDatasets()
+})
+
+watch(selectedDataset, () => {
+  syncSelectionToGlobalState()
 })
 </script>
 
@@ -202,6 +299,40 @@ onMounted(() => {
           </button>
         </div>
       </div>
+    </div>
+
+    <div class="sample-summary mb-5">
+      <h5>Danh sách mẫu đã chọn</h5>
+      <div v-if="selectedSampleDisplay.length > 0" class="table-responsive">
+        <table class="table table-bordered table-sm">
+          <thead>
+            <tr>
+              <th>ID mẫu</th>
+              <th>Tên mẫu</th>
+              <th>Tập dữ liệu</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(item, index) in selectedSampleDisplay" :key="`${item.sampleId ?? 'sample'}-${index}`">
+              <td>{{ item.sampleId ?? '-' }}</td>
+              <td>{{ item.sampleName }}</td>
+              <td>{{ item.datasetName }}</td>
+              <td class="text-center">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-danger"
+                  :disabled="item.sampleId === null"
+                  @click="removeSelectedSample(item.sampleId)"
+                >
+                  X
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-else class="text-muted mb-0">Chưa có mẫu nào được chọn.</p>
     </div>
 
     <div class="footerAction">

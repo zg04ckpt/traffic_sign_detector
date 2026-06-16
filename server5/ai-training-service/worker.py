@@ -159,7 +159,7 @@ class TrainingWorker:
             detail="Preparing dataset for training",
         )
 
-        samples = _normalize_list_of_maps(_case_insensitive_get(payload, "samples"))
+        samples = self._extract_selected_samples(payload)
         self._setup_dataset(samples)
 
         self._publish_status(
@@ -210,6 +210,23 @@ class TrainingWorker:
             recall=result.recall,
             model_artifact_path=model_artifact_path,
         )
+
+    def _extract_selected_samples(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+        # Prefer explicit selected-sample keys from upstream payloads.
+        selected = _normalize_list_of_maps(_case_insensitive_get(payload, "DsMauHL"))
+        if selected:
+            return selected
+
+        selected = _normalize_list_of_maps(_case_insensitive_get(payload, "selectedSamples"))
+        if selected:
+            return selected
+
+        # Backward compatibility with current TrainingJobMessage record field.
+        selected = _normalize_list_of_maps(_case_insensitive_get(payload, "samples"))
+        if selected:
+            return selected
+
+        raise RuntimeError("No selected samples found in training payload")
 
     def _setup_dataset(self, raw_samples: List[Dict[str, Any]]) -> None:
         samples = self._build_samples(raw_samples)

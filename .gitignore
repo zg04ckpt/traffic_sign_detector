@@ -1,3 +1,25 @@
 **/bin
 **/obj
 **/.vs
+./B22DCCN589 - Hoang Cao Nguyen - Bao cao thiet ke.docx
+
+# Client3 (Node.js / Vite)
+client3/node_modules/
+client3/dist/
+client3/.env
+client3/.env.*
+!client3/.env.example
+client3/.vscode/
+
+# Server5 (Java / Maven)
+server5/**/target/
+server5/.idea/
+server5/**/*.iml
+server5/.settings/
+server5/.classpath
+server5/.project
+
+# Dataset images
+**/dataset/**/*.jpg
+**/dataset/**/*.jpeg
+**/dataset/**/*.png

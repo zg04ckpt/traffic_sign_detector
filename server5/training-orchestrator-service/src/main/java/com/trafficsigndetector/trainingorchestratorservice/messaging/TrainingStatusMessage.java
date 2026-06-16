@@ -6,12 +6,12 @@ public record TrainingStatusMessage(
         String trackingId,
         String state,
         String detail,
-                Instant updatedAt,
-                Integer currentEpoch,
-                Double precision,
-                Double recall,
-                String logLine,
-                String modelArtifactPath
+        Instant updatedAt,
+        Integer currentEpoch,
+        Double precision,
+        Double recall,
+        String logLine,
+        String modelArtifactPath
 ) {
         public TrainingStatusMessage(String trackingId, String state, String detail, Instant updatedAt) {
                 this(trackingId, state, detail, updatedAt, null, null, null, null, null);

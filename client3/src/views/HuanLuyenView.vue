@@ -32,6 +32,21 @@ const progressPercent = computed(() => {
   return Math.round((Math.min(currentEpoch.value, totalEpoch.value) / totalEpoch.value) * 100)
 })
 
+const selectedSampleDisplay = computed(() => {
+  if (trainingState.selectedSampleCache.length > 0) {
+    return trainingState.selectedSampleCache
+  }
+
+  return trainingState.selectedSamples.map(sample => ({
+    sampleId: typeof sample.Id === 'number' ? sample.Id : null,
+    sampleName: sample.DuongDanAnh
+      ? sample.DuongDanAnh.split('/').pop()?.split('\\').pop() || `Mẫu #${sample.Id ?? 'N/A'}`
+      : `Mẫu #${sample.Id ?? 'N/A'}`,
+    datasetId: trainingState.selectedDatasetId ?? null,
+    datasetName: trainingState.selectedDatasetId ? `Dataset #${trainingState.selectedDatasetId}` : 'Không xác định',
+  }))
+})
+
 function appendLog(message: string) {
   logLines.value.push(message)
   nextTick(() => {
@@ -239,6 +254,29 @@ function goToModelStep() {
     <div v-if="isCompleted" class="mt-3">
       <button id="btnContinue" class="btn btn-primary" @click="onContinue">Tiếp tục</button>
       <div v-if="isFailed" class="text-danger mt-2">Huấn luyện thất bại. Kiểm tra log để biết chi tiết.</div>
+    </div>
+
+    <div class="sample-summary mt-4">
+      <h5>Danh sách mẫu đã chọn</h5>
+      <div v-if="selectedSampleDisplay.length > 0" class="table-responsive">
+        <table class="table table-bordered table-sm">
+          <thead>
+            <tr>
+              <th>ID mẫu</th>
+              <th>Tên mẫu</th>
+              <th>Tập dữ liệu</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(item, index) in selectedSampleDisplay" :key="`${item.sampleId ?? 'sample'}-${index}`">
+              <td>{{ item.sampleId ?? '-' }}</td>
+              <td>{{ item.sampleName }}</td>
+              <td>{{ item.datasetName }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-else class="text-muted mb-0">Chưa có mẫu nào được chọn.</p>
     </div>
   </section>
 </template>
