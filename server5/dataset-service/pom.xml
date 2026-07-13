@@ -72,6 +72,11 @@
             <artifactId>common-model</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>8.5.9</version>
+        </dependency>
 
         <dependency>
             <groupId>org.postgresql</groupId>

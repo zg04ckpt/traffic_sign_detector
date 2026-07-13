@@ -15,8 +15,12 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import com.trafficsigndetector.datasetservice.dto.DatasetCreateRequestDTO;
+import com.trafficsigndetector.datasetservice.dto.DatasetUpdateRequestDTO;
 
 import java.util.List;
 
@@ -46,37 +50,30 @@ public class TapDuLieuController {
 
     @PostMapping(value = "/tap-du-lieu", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    public TapDuLieu createDataset(
-            @RequestParam("tenDataset") String tenDataset,
-            @RequestParam("images") List<MultipartFile> images,
-            @RequestParam(value = "labels", required = false) List<MultipartFile> labels
-    ) {
-        int imageCount = images == null ? 0 : images.size();
-        int labelCount = labels == null ? 0 : labels.size();
-        log.info("POST /api/tap-du-lieu tenDataset='{}' images={} labels={}", tenDataset, imageCount, labelCount);
-        return datasetCatalogService.createDataset(tenDataset, images, labels);
+    public TapDuLieu createDataset(@ModelAttribute DatasetCreateRequestDTO request) {
+        int imageCount = request.getImages() == null ? 0 : request.getImages().size();
+        int labelCount = request.getLabels() == null ? 0 : request.getLabels().size();
+        log.info("POST /api/tap-du-lieu tenDataset='{}' images={} labels={}", request.getTenDataset(), imageCount, labelCount);
+        return datasetCatalogService.createDataset(request.getTenDataset(), request.getImages(), request.getLabels());
     }
 
     @PutMapping(value = "/tap-du-lieu/{tapDuLieuId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public TapDuLieu updateDataset(
             @PathVariable int tapDuLieuId,
-            @RequestParam(value = "tenDataset", required = false) String tenDataset,
-            @RequestParam(value = "addImages", required = false) List<MultipartFile> addImages,
-            @RequestParam(value = "labels", required = false) List<MultipartFile> labels,
-            @RequestParam(value = "removeSampleIds", required = false) List<Integer> removeSampleIds
+            @ModelAttribute DatasetUpdateRequestDTO request
     ) {
-        int addImageCount = addImages == null ? 0 : addImages.size();
-        int labelCount = labels == null ? 0 : labels.size();
-        int removeCount = removeSampleIds == null ? 0 : removeSampleIds.size();
+        int addImageCount = request.getAddImages() == null ? 0 : request.getAddImages().size();
+        int labelCount = request.getLabels() == null ? 0 : request.getLabels().size();
+        int removeCount = request.getRemoveSampleIds() == null ? 0 : request.getRemoveSampleIds().size();
         log.info(
                 "PUT /api/tap-du-lieu/{} tenDataset='{}' addImages={} labels={} removeSampleIds={}",
                 tapDuLieuId,
-                tenDataset,
+                request.getTenDataset(),
                 addImageCount,
                 labelCount,
                 removeCount
         );
-        return datasetCatalogService.updateDataset(tapDuLieuId, tenDataset, addImages, labels, removeSampleIds);
+        return datasetCatalogService.updateDataset(tapDuLieuId, request.getTenDataset(), request.getAddImages(), request.getLabels(), request.getRemoveSampleIds());
     }
 
     @DeleteMapping("/tap-du-lieu/{tapDuLieuId}")
