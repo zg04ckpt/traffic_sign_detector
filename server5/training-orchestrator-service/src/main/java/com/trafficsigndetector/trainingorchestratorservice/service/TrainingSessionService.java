@@ -161,10 +161,14 @@ public class TrainingSessionService {
         int moHinhId = requireParamInt(moHinh.id(), "moHinh.id");
         String tenVersion = "v" + thongTinHLId + " " + LocalDateTime.now(versionNameZoneId).format(VERSION_SUFFIX_FORMATTER);
 
-        Path tempModelPath = fileStorageService.resolveTempModelPath(session.getDuongDanMoHinhKetQua());
-        String targetFileName = fileStorageService.buildTargetFileName(tenVersion, tempModelPath.getFileName().toString());
+        String tempModelPath = session.getDuongDanMoHinhKetQua();
+        if (tempModelPath == null || tempModelPath.isBlank()) {
+            throw new IllegalStateException("Training result has no temporary model artifact path");
+        }
+        String sourceFileName = fileStorageService.extractFileName(tempModelPath);
+        String targetFileName = fileStorageService.buildTargetFileName(tenVersion, sourceFileName);
         
-        Path aimodelTargetPath = fileStorageService.copyToAimodelStore(tempModelPath, moHinhId, targetFileName);
+        String targetObjectName = fileStorageService.copyToAimodelStore(tempModelPath, moHinhId, targetFileName);
         String modelPublicPath = fileStorageService.normalizeAimodelPublicPath(moHinhId, targetFileName);
 
         PhienBan payload = new PhienBan(
@@ -184,12 +188,12 @@ public class TrainingSessionService {
                     .retrieve()
                     .body(PhienBan.class);
         } catch (RuntimeException ex) {
-            fileStorageService.deleteIfExistsQuietly(aimodelTargetPath);
+            fileStorageService.deleteIfExistsQuietly(targetObjectName);
             throw ex;
         }
 
         if (created == null || created.id() == null) {
-            fileStorageService.deleteIfExistsQuietly(aimodelTargetPath);
+            fileStorageService.deleteIfExistsQuietly(targetObjectName);
             throw new IllegalStateException("Could not create model version via aimodel-service");
         }
 
