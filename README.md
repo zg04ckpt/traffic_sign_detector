@@ -19,12 +19,17 @@ Developed on the **Java Spring Boot / Spring Cloud** platform, comprising the fo
 - **`training-orchestrator-service/`**: The service orchestrating the training process, managing event flows and synchronizing states between the backend and AI workers.
 
 ### 2.3. AI Processing Worker
-- **`ai-training-service/`**: An independent module written in **Python**. It acts as a worker executing deep learning model training tasks (such as YOLO) based on input data. This worker interacts with the system through asynchronous mechanisms or REST APIs.
+- **`ai-training-service/`**: An independent module written in **Python**. It acts as a worker executing deep learning model training tasks (such as YOLO) based on input data. This worker interacts with the system through asynchronous mechanisms (RabbitMQ) and retrieves data directly from MinIO.
+
+### 2.4. Core Infrastructure
+- **RabbitMQ**: The message broker used for asynchronous communication between the `training-orchestrator-service` and the `ai-training-service`.
+- **MinIO**: S3-compatible Object Storage responsible for persistently storing all unstructured data, including datasets (images, labels) and trained AI models (.pt files), ensuring the system remains stateless and horizontally scalable.
 
 ## 3. Technologies & Stack
 - **Frontend**: Vue.js, TypeScript, Vite.
 - **Backend**: Java 17+, Spring Boot, Spring Cloud (Gateway, Eureka, Config).
 - **AI/Machine Learning**: Python, PyTorch/YOLO (or equivalent).
+- **Infrastructure**: RabbitMQ (Message Queue), MinIO (Object Storage), PostgreSQL (Relational Database).
 - **Deployment**: Dockerized services, supporting automated deployment on a **Kubernetes (K8s)** cluster (configurations located at `server5/k8s/`).
 
 ## 4. Installation and Operation Guide
