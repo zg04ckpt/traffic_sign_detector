@@ -4,10 +4,12 @@ from pathlib import Path
 from train_traffic_signs import TrainingConfig, train_model
 from settings import WorkerSettings
 from utils import safe_file_name, to_absolute_path
+from minio_client import MinioClientWrapper
 
 class TrainerEngine:
-    def __init__(self, settings: WorkerSettings):
+    def __init__(self, settings: WorkerSettings, minio_client: MinioClientWrapper):
         self.settings = settings
+        self.minio_client = minio_client
         self.base_dir = Path(__file__).resolve().parent
 
     def run_training(self, tracking_id: str, payload_config: dict, progress_callback) -> str:
@@ -78,6 +80,11 @@ class TrainerEngine:
         destination_file_name = f"training-{safe_file_name(tracking_id)}.pt"
         destination = self.settings.model_output_dir / destination_file_name
         shutil.copy2(best_model_path, destination)
+
+        # Upload to MinIO
+        minio_path = self.minio_client.upload_model(destination, destination_file_name)
+        if minio_path:
+            return minio_path
 
         prefix = self.settings.model_artifact_public_prefix.rstrip("/")
         return f"{prefix}/{destination_file_name}"

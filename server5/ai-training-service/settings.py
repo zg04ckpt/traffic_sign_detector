@@ -19,6 +19,12 @@ class WorkerSettings:
     model_output_dir: Path
     model_artifact_public_prefix: str
     reconnect_delay_seconds: int
+    minio_endpoint: str
+    minio_access_key: str
+    minio_secret_key: str
+    minio_datasets_bucket: str
+    minio_models_bucket: str
+    minio_secure: bool
 
 def _env(*keys: str, default: str = "") -> str:
     for key in keys:
@@ -44,6 +50,12 @@ def load_settings() -> WorkerSettings:
         uploads_dir=Path(_env("TRAINING_UPLOADS_DIR", "APP_STORAGE_UPLOAD_DIR", default="/data/uploads")).resolve(),
         model_store_dir=Path(_env("TRAINING_MODEL_STORE_DIR", "APP_TRAINING_ARTIFACT_AIMODEL_MODEL_DIR", default="/data/aimodel")).resolve(),
         model_output_dir=Path(_env("TRAINING_MODEL_OUTPUT_DIR", default="/data/runtime/training/outputs")).resolve(),
-        model_artifact_public_prefix=_env("MODEL_ARTIFACT_PUBLIC_PREFIX", "TRAINING_MODEL_ARTIFACT_PUBLIC_PREFIX", default="/runtime/training/outputs"),
+        model_artifact_public_prefix=_env("MODEL_ARTIFACT_PUBLIC_PREFIX", "TRAINING_MODEL_ARTIFACT_PUBLIC_PREFIX", default="/models"),
         reconnect_delay_seconds=int(_env("WORKER_RECONNECT_DELAY_SECONDS", default="5")),
+        minio_endpoint=_env("MINIO_ENDPOINT", default="minio:9000"),
+        minio_access_key=_env("MINIO_ACCESS_KEY", default="minioadmin"),
+        minio_secret_key=_env("MINIO_SECRET_KEY", default="minioadmin123"),
+        minio_datasets_bucket=_env("MINIO_DATASETS_BUCKET", default="datasets"),
+        minio_models_bucket=_env("MINIO_MODELS_BUCKET", default="models"),
+        minio_secure=_env("MINIO_SECURE", default="false").lower() in ["true", "1", "t", "y", "yes"]
     )

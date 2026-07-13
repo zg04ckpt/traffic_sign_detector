@@ -8,6 +8,7 @@ from settings import load_settings, WorkerSettings
 from rabbitmq_listener import RabbitMQListener
 from dataset_manager import DatasetManager
 from trainer_engine import TrainerEngine
+from minio_client import MinioClientWrapper
 from utils import case_insensitive_get, normalize_list_of_maps
 
 LOGGER = logging.getLogger("training-python-worker")
@@ -15,9 +16,10 @@ LOGGER = logging.getLogger("training-python-worker")
 class TrainingWorker:
     def __init__(self, settings: WorkerSettings):
         self.settings = settings
+        self.minio_client = MinioClientWrapper(settings)
         self.listener = RabbitMQListener(settings)
-        self.dataset_manager = DatasetManager(settings)
-        self.trainer_engine = TrainerEngine(settings)
+        self.dataset_manager = DatasetManager(settings, self.minio_client)
+        self.trainer_engine = TrainerEngine(settings, self.minio_client)
 
     def run_forever(self) -> None:
         while True:

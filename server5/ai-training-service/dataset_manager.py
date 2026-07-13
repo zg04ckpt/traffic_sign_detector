@@ -11,6 +11,7 @@ from utils import (
     as_int, as_float, as_string, case_insensitive_get, as_map,
     normalize_list_of_maps, to_absolute_path, extract_file_name, reset_dir
 )
+from minio_client import MinioClientWrapper
 
 @dataclass
 class PreparedSample:
@@ -19,8 +20,9 @@ class PreparedSample:
     labels: List[str]
 
 class DatasetManager:
-    def __init__(self, settings: WorkerSettings):
+    def __init__(self, settings: WorkerSettings, minio_client: MinioClientWrapper):
         self.settings = settings
+        self.minio_client = minio_client
         self.base_dir = Path(__file__).resolve().parent
 
     def setup_dataset(self, raw_samples: List[Dict[str, Any]]) -> None:
@@ -116,11 +118,23 @@ class DatasetManager:
         target_yaml_path.write_text(yaml.safe_dump(yaml_payload, sort_keys=False), encoding="utf-8")
 
     def _resolve_image_path(self, image_ref: str, image_name: str) -> Path:
+        normalized = image_ref.replace("\\", "/")
+        
+        # Check if it's a MinIO path like /datasets/datasetName/uuid.jpg
+        minio_prefix = f"/{self.settings.minio_datasets_bucket}/"
+        if normalized.startswith(minio_prefix):
+            object_name = normalized[len(minio_prefix):]
+            downloads_dir = self.settings.runtime_dir / "raw_downloads"
+            downloads_dir.mkdir(parents=True, exist_ok=True)
+            download_path = downloads_dir / image_name
+            
+            if download_path.exists() or self.minio_client.download_dataset_file(object_name, download_path):
+                return download_path
+            raise FileNotFoundError(f"Failed to download image from MinIO: {object_name}")
+
         absolute = to_absolute_path(image_ref)
         if absolute and absolute.exists():
             return absolute
-
-        normalized = image_ref.replace("\\", "/")
 
         if normalized.startswith("http://") or normalized.startswith("https://"):
             uri_path = urlparse(normalized).path
