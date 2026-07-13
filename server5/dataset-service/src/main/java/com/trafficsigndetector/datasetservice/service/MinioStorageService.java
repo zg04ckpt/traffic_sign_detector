@@ -17,7 +17,7 @@ public class MinioStorageService {
     private final MinioClient minioClient;
     private final String bucketName;
 
-    public MinioStorageService(MinioClient minioClient, @Value("${minio.bucket.datasets:datasets}") String bucketName) {
+    public MinioStorageService(MinioClient minioClient, @Value("${minio.bucket.datasets}") String bucketName) {
         this.minioClient = minioClient;
         this.bucketName = bucketName;
         initBucket();

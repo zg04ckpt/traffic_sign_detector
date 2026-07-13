@@ -16,8 +16,8 @@ public class TrainingFileStorageService {
 
     public TrainingFileStorageService(
             MinioClient minioClient,
-            @Value("${app.training.artifact.aimodel-public-prefix:/models}") String aimodelModelPublicPrefix,
-            @Value("${minio.bucket.models:models}") String bucketName
+            @Value("${app.training.artifact.aimodel-public-prefix}") String aimodelModelPublicPrefix,
+            @Value("${minio.bucket.models}") String bucketName
     ) {
         this.minioClient = minioClient;
         this.aimodelModelPublicPrefix = aimodelModelPublicPrefix;

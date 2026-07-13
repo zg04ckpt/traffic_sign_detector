@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+import jakarta.validation.Valid;
+
 @RestController
 @RequestMapping("/api")
 public class MoHinhController {
@@ -35,7 +37,7 @@ public class MoHinhController {
     @ResponseStatus(HttpStatus.CREATED)
     public PhienBan createNewVersion(
             @PathVariable int moHinhId,
-            @RequestBody CreateVersionRequest payload
+            @Valid @RequestBody CreateVersionRequest payload
     ) {
         try {
             return modelCatalogService.createVersion(moHinhId, payload);
