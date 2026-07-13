@@ -6,7 +6,6 @@ import com.trafficsigndetector.sharedmodel.Mau;
 import com.trafficsigndetector.sharedmodel.TapDuLieu;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -15,17 +14,12 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 @Service
 public class DatasetCatalogService {
@@ -33,15 +27,14 @@ public class DatasetCatalogService {
     private static final Logger log = LoggerFactory.getLogger(DatasetCatalogService.class);
 
     private final DatasetJdbcRepository datasetRepository;
-    private final Path uploadRoot;
+    private final MinioStorageService minioStorageService;
 
     public DatasetCatalogService(
             DatasetJdbcRepository datasetRepository,
-            @Value("${app.storage.upload-dir:dataset-service/uploads}") String uploadDir
+            MinioStorageService minioStorageService
     ) {
         this.datasetRepository = datasetRepository;
-        this.uploadRoot = Paths.get(uploadDir).toAbsolutePath().normalize();
-        initStorage();
+        this.minioStorageService = minioStorageService;
     }
 
     @Transactional
@@ -61,7 +54,7 @@ public class DatasetCatalogService {
         int datasetId = datasetRepository.insertTapDuLieu(datasetName);
 
         try {
-            addUploadedSamples(datasetId, images, normalizeFiles(labelFiles));
+            addUploadedSamples(datasetId, datasetName, images, normalizeFiles(labelFiles));
             TapDuLieu saved = datasetRepository.findFullById(datasetId)
                     .orElseThrow(() -> new IllegalStateException("Dataset not found after create: " + datasetId));
             log.info("Created dataset id={} name='{}' samples={}", saved.id(), saved.ten(),
@@ -69,7 +62,6 @@ public class DatasetCatalogService {
             return saved;
         } catch (RuntimeException ex) {
             log.error("Create dataset failed for id={} name='{}'", datasetId, datasetName, ex);
-            cleanupDatasetFolder(datasetId);
             datasetRepository.deleteTapDuLieu(datasetId);
             throw ex;
         }
@@ -85,12 +77,14 @@ public class DatasetCatalogService {
     ) {
         TapDuLieu current = requireDataset(datasetId);
 
+        String currentName = current.ten();
         if (tenDataset != null && !tenDataset.isBlank()) {
-            datasetRepository.updateTapDuLieuTen(datasetId, normalizeDatasetName(tenDataset));
+            currentName = normalizeDatasetName(tenDataset);
+            datasetRepository.updateTapDuLieuTen(datasetId, currentName);
         }
 
         removeSamples(datasetId, current, removeSampleIds);
-        addUploadedSamples(datasetId, normalizeFiles(addImages), normalizeFiles(labelFiles));
+        addUploadedSamples(datasetId, currentName, normalizeFiles(addImages), normalizeFiles(labelFiles));
 
         return datasetRepository.findFullById(datasetId)
                 .orElseThrow(() -> new IllegalStateException("Dataset not found: " + datasetId));
@@ -98,8 +92,12 @@ public class DatasetCatalogService {
 
     @Transactional
     public void deleteDataset(int datasetId) {
-        requireDataset(datasetId);
-        cleanupDatasetFolder(datasetId);
+        TapDuLieu current = requireDataset(datasetId);
+        if (current.dsMau() != null) {
+            for (Mau sample : current.dsMau()) {
+                minioStorageService.deleteFile(sample.duongDanAnh());
+            }
+        }
         datasetRepository.deleteTapDuLieu(datasetId);
     }
 
@@ -119,42 +117,16 @@ public class DatasetCatalogService {
             throw new IllegalArgumentException("File upload is empty");
         }
 
-        requireDataset(datasetId);
+        TapDuLieu dataset = requireDataset(datasetId);
+        String minioPath = minioStorageService.storeFile(file, dataset.ten());
+        int mauId = datasetRepository.insertMau(datasetId, minioPath, "unknown");
 
-        String originalName = file.getOriginalFilename();
-        String extension = extractExtension(originalName);
-        String generated = UUID.randomUUID() + (extension.isEmpty() ? "" : "." + extension);
-
-        Path datasetFolder = uploadRoot.resolve("dataset-" + datasetId);
-        try {
-            Files.createDirectories(datasetFolder);
-            Files.copy(file.getInputStream(), datasetFolder.resolve(generated), StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException ex) {
-            throw new IllegalArgumentException("Could not store file: " + ex.getMessage());
-        }
-
-        String duongDan = "/uploads/dataset-" + datasetId + "/" + generated;
-        int mauId = datasetRepository.insertMau(datasetId, duongDan, "unknown");
-
-        return new Mau(mauId, duongDan, "unknown", List.of());
-    }
-
-    public String getUploadRoot() {
-        return uploadRoot.toString();
+        return new Mau(mauId, minioPath, "unknown", List.of());
     }
 
     private TapDuLieu requireDataset(int datasetId) {
         return datasetRepository.findFullById(datasetId)
                 .orElseThrow(() -> new IllegalStateException("Dataset not found: " + datasetId));
-    }
-
-    private void initStorage() {
-        try {
-            Files.createDirectories(uploadRoot);
-            log.info("Dataset upload root: {}", uploadRoot);
-        } catch (IOException ex) {
-            throw new IllegalStateException("Cannot initialize upload directory: " + uploadRoot, ex);
-        }
     }
 
     private String normalizeDatasetName(String tenDataset) {
@@ -185,14 +157,14 @@ public class DatasetCatalogService {
         if (current.dsMau() != null) {
             for (Mau sample : current.dsMau()) {
                 if (sample.id() != null && removeSet.contains(sample.id())) {
-                    deleteSampleFileIfExists(datasetId, sample.duongDanAnh());
+                    minioStorageService.deleteFile(sample.duongDanAnh());
                 }
             }
         }
         datasetRepository.deleteMauForDatasetWhereIdIn(datasetId, new ArrayList<>(removeSet));
     }
 
-    private void addUploadedSamples(int datasetId, List<MultipartFile> imageFiles, List<MultipartFile> labelFiles) {
+    private void addUploadedSamples(int datasetId, String datasetName, List<MultipartFile> imageFiles, List<MultipartFile> labelFiles) {
         if (imageFiles.isEmpty()) {
             return;
         }
@@ -206,25 +178,11 @@ public class DatasetCatalogService {
 
         Map<Integer, LoaiBien> loaiBienMap = datasetRepository.loadLoaiBienById();
 
-        Path datasetFolder = uploadRoot.resolve("dataset-" + datasetId);
-        try {
-            Files.createDirectories(datasetFolder);
-        } catch (IOException ex) {
-            throw new IllegalArgumentException("Không thể tạo thư mục dataset: " + ex.getMessage(), ex);
-        }
-
         for (int i = 0; i < imageFiles.size(); i++) {
             MultipartFile image = imageFiles.get(i);
-            String generated = generateImageName(image.getOriginalFilename());
-            Path target = datasetFolder.resolve(generated);
-            try {
-                Files.copy(image.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException ex) {
-                throw new IllegalArgumentException("Không thể lưu ảnh upload: " + ex.getMessage(), ex);
-            }
-
-            String duongDan = "/uploads/dataset-" + datasetId + "/" + generated;
-            int mauId = datasetRepository.insertMau(datasetId, duongDan, "unknown");
+            
+            String minioPath = minioStorageService.storeFile(image, datasetName);
+            int mauId = datasetRepository.insertMau(datasetId, minioPath, "unknown");
 
             String imageBaseName = extractBaseName(image.getOriginalFilename());
             List<ParsedLabel> labels = labelsByImageName.get(imageBaseName);
@@ -310,11 +268,6 @@ public class DatasetCatalogService {
         return labels;
     }
 
-    private String generateImageName(String originalName) {
-        String extension = extractExtension(originalName);
-        return UUID.randomUUID() + (extension.isEmpty() ? "" : "." + extension);
-    }
-
     private String extractBaseName(String fileName) {
         if (fileName == null || fileName.isBlank()) {
             return "";
@@ -326,69 +279,6 @@ public class DatasetCatalogService {
             return rawName;
         }
         return rawName.substring(0, dot);
-    }
-
-    private void deleteSampleFileIfExists(int datasetId, String duongDanAnh) {
-        if (duongDanAnh == null || duongDanAnh.isBlank()) {
-            return;
-        }
-
-        String normalized = duongDanAnh.replace('\\', '/');
-        String relative;
-        if (normalized.startsWith("/uploads/")) {
-            relative = normalized.substring("/uploads/".length());
-        } else if (normalized.startsWith("uploads/")) {
-            relative = normalized.substring("uploads/".length());
-        } else {
-            String fileName = normalized.substring(normalized.lastIndexOf('/') + 1);
-            relative = "dataset-" + datasetId + "/" + fileName;
-        }
-
-        Path path = uploadRoot.resolve(relative).normalize();
-        if (!path.startsWith(uploadRoot)) {
-            return;
-        }
-
-        try {
-            Files.deleteIfExists(path);
-        } catch (IOException ignored) {
-            // Best effort cleanup.
-        }
-    }
-
-    private void cleanupDatasetFolder(Integer datasetId) {
-        if (datasetId == null) {
-            return;
-        }
-        Path folder = uploadRoot.resolve("dataset-" + datasetId).normalize();
-        if (!folder.startsWith(uploadRoot) || !Files.exists(folder)) {
-            return;
-        }
-
-        try {
-            Files.walk(folder)
-                    .sorted((a, b) -> b.getNameCount() - a.getNameCount())
-                    .forEach(path -> {
-                        try {
-                            Files.deleteIfExists(path);
-                        } catch (IOException ignored) {
-                            // Best effort cleanup.
-                        }
-                    });
-        } catch (IOException ignored) {
-            // Best effort cleanup.
-        }
-    }
-
-    private String extractExtension(String name) {
-        if (name == null || name.isBlank()) {
-            return "";
-        }
-        int idx = name.lastIndexOf('.');
-        if (idx < 0 || idx == name.length() - 1) {
-            return "";
-        }
-        return name.substring(idx + 1).replaceAll("[^A-Za-z0-9]", "");
     }
 
     private record LabelFileContent(String baseName, List<ParsedLabel> labels) {

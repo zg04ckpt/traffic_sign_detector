@@ -3,13 +3,11 @@ package com.trafficsigndetector.trainingorchestratorservice.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.trafficsigndetector.sharedmodel.Mau;
 import com.trafficsigndetector.sharedmodel.MauHL;
 import com.trafficsigndetector.sharedmodel.MoHinh;
 import com.trafficsigndetector.sharedmodel.PhienBan;
 import com.trafficsigndetector.sharedmodel.ThongTinHL;
-import com.trafficsigndetector.trainingorchestratorservice.messaging.TrainingJobMessage;
-import com.trafficsigndetector.trainingorchestratorservice.messaging.TrainingJobPublisher;
+import com.trafficsigndetector.trainingorchestratorservice.constant.AppConstants;
 import com.trafficsigndetector.trainingorchestratorservice.messaging.TrainingStatusMessage;
 import com.trafficsigndetector.trainingorchestratorservice.messaging.TrainingStatusTracker;
 import com.trafficsigndetector.trainingorchestratorservice.persistence.entity.ThongTinHLEntity;
@@ -19,18 +17,13 @@ import com.trafficsigndetector.trainingorchestratorservice.persistence.jdbc.Trai
 import com.trafficsigndetector.trainingorchestratorservice.persistence.jdbc.TrainingStatusEventJdbcRepository;
 import com.trafficsigndetector.trainingorchestratorservice.service.state.TrainingLifecycleState;
 import com.trafficsigndetector.trainingorchestratorservice.service.state.TrainingSessionStateMachine;
-import com.trafficsigndetector.trainingorchestratorservice.service.strategy.TrainingJobBuildStrategy;
-import org.springframework.amqp.AmqpException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -47,85 +40,69 @@ public class TrainingSessionService {
     private static final TypeReference<List<MauHL>> MAU_HL_LIST_TYPE = new TypeReference<>() {};
     private static final DateTimeFormatter VERSION_SUFFIX_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy");
 
-    private final TrainingJobPublisher trainingJobPublisher;
     private final TrainingStatusTracker trainingStatusTracker;
     private final TrainingSessionJdbcRepository trainingSessionJdbcRepository;
     private final MauHLJdbcRepository mauHLJdbcRepository;
     private final TrainingStatusEventJdbcRepository trainingStatusEventJdbcRepository;
     private final TrainingSessionStateMachine trainingSessionStateMachine;
-    private final List<TrainingJobBuildStrategy> trainingJobBuildStrategies;
     private final ObjectMapper objectMapper;
     private final RestClient aimodelRestClient;
     private final ZoneId versionNameZoneId;
-    private final Path workingRoot;
-    private final Path workerTempModelDir;
-    private final Path aimodelModelStoreDir;
-    private final String aimodelModelPublicPrefix;
-    private final int maxConcurrentTraining;
-    private final int maxQueuedTraining;
+
+    private final TrainingJobScheduler trainingJobScheduler;
+    private final TrainingFileStorageService fileStorageService;
 
     public TrainingSessionService(
-            TrainingJobPublisher trainingJobPublisher,
             TrainingStatusTracker trainingStatusTracker,
             TrainingSessionJdbcRepository trainingSessionJdbcRepository,
             MauHLJdbcRepository mauHLJdbcRepository,
             TrainingStatusEventJdbcRepository trainingStatusEventJdbcRepository,
             TrainingSessionStateMachine trainingSessionStateMachine,
-            List<TrainingJobBuildStrategy> trainingJobBuildStrategies,
             ObjectMapper objectMapper,
+            TrainingJobScheduler trainingJobScheduler,
+            TrainingFileStorageService fileStorageService,
             @Value("${services.aimodel-base-url:http://localhost:8082}") String aimodelBaseUrl,
-            @Value("${app.training.version-name.timezone:Asia/Ho_Chi_Minh}") String versionNameTimezone,
-            @Value("${app.training.artifact.temp-model-dir:../ai-training-service/runtime/training/outputs}") String workerTempModelDir,
-            @Value("${app.training.artifact.aimodel-model-dir:../aimodel-service/models}") String aimodelModelStoreDir,
-            @Value("${app.training.artifact.aimodel-public-prefix:/models}") String aimodelModelPublicPrefix,
-            @Value("${app.training.admission.max-concurrent:1}") int maxConcurrentTraining,
-            @Value("${app.training.admission.max-queued:10}") int maxQueuedTraining
+            @Value("${app.training.version-name.timezone:Asia/Ho_Chi_Minh}") String versionNameTimezone
     ) {
-        this.trainingJobPublisher = trainingJobPublisher;
         this.trainingStatusTracker = trainingStatusTracker;
         this.trainingSessionJdbcRepository = trainingSessionJdbcRepository;
         this.mauHLJdbcRepository = mauHLJdbcRepository;
         this.trainingStatusEventJdbcRepository = trainingStatusEventJdbcRepository;
         this.trainingSessionStateMachine = trainingSessionStateMachine;
-        this.trainingJobBuildStrategies = trainingJobBuildStrategies;
         this.objectMapper = objectMapper;
+        this.trainingJobScheduler = trainingJobScheduler;
+        this.fileStorageService = fileStorageService;
         this.aimodelRestClient = RestClient.builder().baseUrl(aimodelBaseUrl).build();
         this.versionNameZoneId = ZoneId.of(versionNameTimezone);
-        this.workingRoot = Path.of("").toAbsolutePath().normalize();
-        this.workerTempModelDir = resolvePath(workerTempModelDir);
-        this.aimodelModelStoreDir = resolvePath(aimodelModelStoreDir);
-        this.aimodelModelPublicPrefix = aimodelModelPublicPrefix;
-        this.maxConcurrentTraining = maxConcurrentTraining;
-        this.maxQueuedTraining = maxQueuedTraining;
     }
 
     @Transactional
     public ThongTinHL createSession(ThongTinHL payload) {
+        if (payload == null) {
+            throw new IllegalArgumentException("Payload is required");
+        }
         ThongTinHLEntity session = new ThongTinHLEntity();
-        session.setEpochs(readInt(payload == null ? null : payload.epochs(), 20));
-        session.setBatchSize(readInt(payload == null ? null : payload.batchSize(), 32));
-        session.setLearningRate(readDouble(payload == null ? null : payload.learningRate(), 0.01));
-        session.setKichThuocAnh(readInt(payload == null ? null : payload.kichThuocAnh(), 416));
-        session.setLoaiThietBi(readString(payload == null ? null : payload.loaiThietBi(), "cpu"));
-        session.setEarlyStoppingPatience(readInt(payload == null ? null : payload.earlyStoppingPatience(), 5));
-        session.setOptimizer(readString(payload == null ? null : payload.optimizer(), "Adam"));
-        session.setTrangThai(TrainingLifecycleState.CREATED.code());
+        session.setEpochs(requireParamInt(payload.epochs(), "epochs"));
+        session.setBatchSize(requireParamInt(payload.batchSize(), "batchSize"));
+        session.setLearningRate(requireParamDouble(payload.learningRate(), "learningRate"));
+        session.setKichThuocAnh(requireParamInt(payload.kichThuocAnh(), "kichThuocAnh"));
+        session.setLoaiThietBi(requireParamString(payload.loaiThietBi(), "loaiThietBi"));
+        session.setEarlyStoppingPatience(requireParamInt(payload.earlyStoppingPatience(), "earlyStoppingPatience"));
+        session.setOptimizer(requireParamString(payload.optimizer(), "optimizer"));
+        session.setTrangThai(AppConstants.STATE_CREATED);
 
-        MoHinh moHinhHL = normalizeModel(payload == null ? null : payload.moHinhHL());
+        MoHinh moHinhHL = normalizeModel(payload.moHinhHL());
         session.setMoHinhHLJson(writeJson(moHinhHL));
 
-        PhienBan phienBanHL = normalizeVersion(payload == null ? null : payload.phienBanHL());
+        PhienBan phienBanHL = normalizeVersion(payload.phienBanHL());
         session.setPhienBanHLJson(writeJson(phienBanHL));
 
-        List<MauHL> dsMauHL = normalizeSamples(payload == null ? null : payload.dsMauHL());
+        List<MauHL> dsMauHL = normalizeSamples(payload.dsMauHL());
         if (dsMauHL.isEmpty()) {
             throw new IllegalStateException("Training payload has no samples (DsMauHL). Please select at least one sample.");
         }
-        // Keep legacy JSON column for backward compatibility while persisting normalized rows.
         session.setDsMauHLJson(writeJson(dsMauHL));
 
-        // Persist once with a temporary non-null tracking id to satisfy DB constraints,
-        // then rewrite it to id-based tracking id for client compatibility.
         session.setTrackingId("pending-" + UUID.randomUUID());
         session = trainingSessionJdbcRepository.save(session);
         replaceMauHL(session, dsMauHL);
@@ -141,14 +118,14 @@ public class TrainingSessionService {
         if (isActiveStatus(session.getTrangThai())) {
             throw new IllegalStateException("Training is already queued or running");
         }
-        enforceAdmissionCapacity();
+        trainingJobScheduler.enforceAdmissionCapacity();
 
-        session.setTrangThai(TrainingLifecycleState.QUEUED.code());
+        session.setTrangThai(AppConstants.STATE_QUEUED);
         trainingSessionJdbcRepository.save(session);
 
         TrainingStatusMessage queued = new TrainingStatusMessage(
                 session.getTrackingId(),
-            TrainingLifecycleState.QUEUED.code(),
+                AppConstants.STATE_QUEUED,
                 "Training request queued",
                 Instant.now()
         );
@@ -162,28 +139,10 @@ public class TrainingSessionService {
             throw new IllegalStateException("Training session has no samples. Recreate the session with selected samples.");
         }
 
-        String modelCode = readString(moHinh.ten(), "traffic-sign-default");
-        String modelPath = readString(phienBan.duongDanMH(), "/models/yolov8s.pt");
-        TrainingJobMessage job = resolveTrainingJobBuildStrategy(session)
-                .build(session, modelCode, modelPath, dsMau);
-        try {
-            trainingJobPublisher.publish(job);
-        } catch (AmqpException ex) {
-            throw new QueueCapacityExceededException("Training queue is full. Please try again later.");
-        }
-    }
-
-    private void enforceAdmissionCapacity() {
-        long running = trainingSessionJdbcRepository.countByTrangThaiIn(List.of("RUNNING", "PREPARING_DATASET"));
-        long queued = trainingSessionJdbcRepository.countByTrangThai("QUEUED");
-
-        if (running > maxConcurrentTraining) {
-            throw new QueueCapacityExceededException("Training workers are saturated. Please try again later.");
-        }
-
-        if (queued >= maxQueuedTraining) {
-            throw new QueueCapacityExceededException("Training queue is full. Please try again later.");
-        }
+        String modelCode = requireParamString(moHinh.ten(), "moHinh.ten");
+        String modelPath = requireParamString(phienBan.duongDanMH(), "phienBan.duongDanMH");
+        
+        trainingJobScheduler.scheduleJob(session, modelCode, modelPath, dsMau);
     }
 
     @Transactional(readOnly = true)
@@ -191,22 +150,26 @@ public class TrainingSessionService {
         return toResponse(requireSession(thongTinHLId));
     }
 
-    @Transactional
     public int saveVersion(int thongTinHLId) {
+        // Step 1: Validate session locally
         ThongTinHLEntity session = requireSession(thongTinHLId);
-        if (!"COMPLETED".equalsIgnoreCase(session.getTrangThai())) {
+        if (!AppConstants.STATE_COMPLETED.equalsIgnoreCase(session.getTrangThai())) {
             throw new IllegalStateException("Training is not completed yet");
         }
 
         MoHinh moHinh = readJsonModel(session.getMoHinhHLJson());
-        int moHinhId = readInt(moHinh.id(), 1);
+        int moHinhId = requireParamInt(moHinh.id(), "moHinh.id");
         String tenVersion = "v" + thongTinHLId + " " + LocalDateTime.now(versionNameZoneId).format(VERSION_SUFFIX_FORMATTER);
 
-        Path tempModelPath = resolveTempModelPath(session.getDuongDanMoHinhKetQua());
-        String targetFileName = buildTargetFileName(tenVersion, tempModelPath.getFileName().toString());
-        Path aimodelTargetPath = aimodelModelStoreDir.resolve("mo-hinh-" + moHinhId).resolve(targetFileName).normalize();
-        copyToAimodelStore(tempModelPath, aimodelTargetPath);
-        String modelPublicPath = normalizeAimodelPublicPath(moHinhId, targetFileName);
+        String tempModelPath = session.getDuongDanMoHinhKetQua();
+        if (tempModelPath == null || tempModelPath.isBlank()) {
+            throw new IllegalStateException("Training result has no temporary model artifact path");
+        }
+        String sourceFileName = fileStorageService.extractFileName(tempModelPath);
+        String targetFileName = fileStorageService.buildTargetFileName(tenVersion, sourceFileName);
+        
+        String targetObjectName = fileStorageService.copyToAimodelStore(tempModelPath, moHinhId, targetFileName);
+        String modelPublicPath = fileStorageService.normalizeAimodelPublicPath(moHinhId, targetFileName);
 
         PhienBan payload = new PhienBan(
                 null,
@@ -215,6 +178,7 @@ public class TrainingSessionService {
                 modelPublicPath
         );
 
+        // Step 2: Make external REST call without holding the DB transaction
         PhienBan created;
         try {
             created = aimodelRestClient.post()
@@ -224,22 +188,29 @@ public class TrainingSessionService {
                     .retrieve()
                     .body(PhienBan.class);
         } catch (RuntimeException ex) {
-            deleteIfExistsQuietly(aimodelTargetPath);
+            fileStorageService.deleteIfExistsQuietly(targetObjectName);
             throw ex;
         }
 
         if (created == null || created.id() == null) {
-            deleteIfExistsQuietly(aimodelTargetPath);
-            throw new IllegalStateException("Could not create model version");
+            fileStorageService.deleteIfExistsQuietly(targetObjectName);
+            throw new IllegalStateException("Could not create model version via aimodel-service");
         }
 
-        deleteTempArtifact(tempModelPath);
+        fileStorageService.deleteTempArtifact(tempModelPath);
 
+        // Step 3: Update local DB in its own new transaction
+        updateSessionAfterVersionCreation(session.getId(), created, modelPublicPath);
+
+        return created.id();
+    }
+
+    @Transactional
+    public void updateSessionAfterVersionCreation(int sessionId, PhienBan created, String modelPublicPath) {
+        ThongTinHLEntity session = requireSession(sessionId);
         session.setPhienBanHLJson(writeJson(created));
         session.setDuongDanMoHinhKetQua(modelPublicPath);
         trainingSessionJdbcRepository.save(session);
-
-        return created.id();
     }
 
     @Transactional
@@ -385,23 +356,26 @@ public class TrainingSessionService {
 
     private MoHinh normalizeModel(MoHinh raw) {
         if (raw == null) {
-            return new MoHinh(1, "TrafficSign-YOLO", "yolov8s.pt", List.of());
+            throw new IllegalArgumentException("MoHinhHL is required");
         }
-        Integer id = raw.id() != null ? raw.id() : 1;
-        String ten = raw.ten() != null && !raw.ten().isBlank() ? raw.ten() : "TrafficSign-YOLO";
-        String goc = raw.moHinhGoc() != null ? raw.moHinhGoc() : "yolov8s.pt";
-        return new MoHinh(id, ten, goc, raw.dsPhienBan());
+        return new MoHinh(
+            requireParamInt(raw.id(), "moHinhHL.id"), 
+            requireParamString(raw.ten(), "moHinhHL.ten"), 
+            requireParamString(raw.moHinhGoc(), "moHinhHL.moHinhGoc"), 
+            raw.dsPhienBan()
+        );
     }
 
     private PhienBan normalizeVersion(PhienBan raw) {
         if (raw == null) {
-            return new PhienBan(101, "v1.0", "Default version", "/models/yolov8s.pt");
+            throw new IllegalArgumentException("PhienBanHL is required");
         }
-        Integer id = raw.id() != null ? raw.id() : 101;
-        String ten = raw.ten() != null && !raw.ten().isBlank() ? raw.ten() : "v1.0";
-        String moTa = raw.moTa() != null ? raw.moTa() : "Default version";
-        String path = raw.duongDanMH() != null ? raw.duongDanMH() : "/models/yolov8s.pt";
-        return new PhienBan(id, ten, moTa, path);
+        return new PhienBan(
+            requireParamInt(raw.id(), "phienBanHL.id"), 
+            requireParamString(raw.ten(), "phienBanHL.ten"), 
+            requireParamString(raw.moTa(), "phienBanHL.moTa"), 
+            requireParamString(raw.duongDanMH(), "phienBanHL.duongDanMH")
+        );
     }
 
     private List<MauHL> normalizeSamples(List<MauHL> raw) {
@@ -419,40 +393,45 @@ public class TrainingSessionService {
 
     private MoHinh readJsonModel(String json) {
         if (json == null || json.isBlank()) {
-            return normalizeModel(null);
+            throw new IllegalStateException("Corrupted DB: MoHinhHLJson is blank");
         }
         try {
-            return normalizeModel(objectMapper.readValue(json, MoHinh.class));
+            return objectMapper.readValue(json, MoHinh.class);
         } catch (JsonProcessingException ex) {
-            return normalizeModel(null);
+            throw new IllegalStateException("Corrupted DB: MoHinhHLJson invalid", ex);
         }
     }
 
     private PhienBan readJsonVersion(String json) {
         if (json == null || json.isBlank()) {
-            return normalizeVersion(null);
+             throw new IllegalStateException("Corrupted DB: PhienBanHLJson is blank");
         }
         try {
-            return normalizeVersion(objectMapper.readValue(json, PhienBan.class));
+            return objectMapper.readValue(json, PhienBan.class);
         } catch (JsonProcessingException ex) {
-            return normalizeVersion(null);
+             throw new IllegalStateException("Corrupted DB: PhienBanHLJson invalid", ex);
         }
     }
 
-    private int readInt(Integer raw, int fallback) {
-        return raw == null ? fallback : raw;
-    }
-
-    private double readDouble(Double raw, double fallback) {
-        return raw == null ? fallback : raw;
-    }
-
-    private String readString(String raw, String fallback) {
+    private int requireParamInt(Integer raw, String paramName) {
         if (raw == null) {
-            return fallback;
+            throw new IllegalArgumentException("Missing required parameter: " + paramName);
         }
-        String t = raw.trim();
-        return t.isEmpty() ? fallback : t;
+        return raw;
+    }
+
+    private double requireParamDouble(Double raw, String paramName) {
+        if (raw == null) {
+            throw new IllegalArgumentException("Missing required parameter: " + paramName);
+        }
+        return raw;
+    }
+
+    private String requireParamString(String raw, String paramName) {
+        if (raw == null || raw.trim().isEmpty()) {
+            throw new IllegalArgumentException("Missing required parameter: " + paramName);
+        }
+        return raw.trim();
     }
 
     private boolean isActiveStatus(String rawState) {
@@ -464,15 +443,6 @@ public class TrainingSessionService {
         ).contains(state);
     }
 
-    private TrainingJobBuildStrategy resolveTrainingJobBuildStrategy(ThongTinHLEntity session) {
-        for (TrainingJobBuildStrategy strategy : trainingJobBuildStrategies) {
-            if (strategy.supports(session)) {
-                return strategy;
-            }
-        }
-        throw new IllegalStateException("No TrainingJobBuildStrategy supports this training session");
-    }
-
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
@@ -480,171 +450,4 @@ public class TrainingSessionService {
             throw new IllegalStateException("Could not serialize training payload", ex);
         }
     }
-
-    private Path resolveTempModelPath(String artifactPath) {
-        String normalized = artifactPath == null ? "" : artifactPath.trim();
-        if (normalized.isEmpty()) {
-            throw new IllegalStateException("Training result has no temporary model artifact path");
-        }
-
-        Path absolute = toAbsolutePath(normalized);
-        if (absolute != null && Files.exists(absolute)) {
-            return absolute;
-        }
-
-        String slashNormalized = normalized.replace('\\', '/');
-        String fileName = extractFileName(slashNormalized);
-
-        Path candidateFromKnownDirs = resolveTempArtifactFromKnownDirs(fileName);
-        if (candidateFromKnownDirs != null) {
-            return candidateFromKnownDirs;
-        }
-
-        if (slashNormalized.startsWith("/runtime/training/outputs/")
-                || slashNormalized.startsWith("runtime/training/outputs/")
-                || slashNormalized.startsWith("/models/outputs/")
-                || slashNormalized.startsWith("models/outputs/")
-                || !slashNormalized.contains("/")) {
-            Path candidate = workerTempModelDir.resolve(fileName).normalize();
-            if (Files.exists(candidate)) {
-                return candidate;
-            }
-        }
-
-        String localRelative = slashNormalized.startsWith("/") ? slashNormalized.substring(1) : slashNormalized;
-
-        Path relative = workingRoot.resolve(localRelative).normalize();
-        if (Files.exists(relative)) {
-            return relative;
-        }
-
-        Path moduleRelative = workingRoot.resolve("training-orchestrator-service").resolve(localRelative).normalize();
-        if (Files.exists(moduleRelative)) {
-            return moduleRelative;
-        }
-
-        Path server5ModuleRelative = workingRoot.resolve("server5")
-                .resolve("training-orchestrator-service")
-                .resolve(localRelative)
-                .normalize();
-        if (Files.exists(server5ModuleRelative)) {
-            return server5ModuleRelative;
-        }
-
-        throw new IllegalStateException("Temporary model artifact not found: " + artifactPath);
-    }
-
-    private Path resolveTempArtifactFromKnownDirs(String fileName) {
-        List<Path> candidateDirs = List.of(
-                workerTempModelDir,
-                workingRoot.resolve("runtime").resolve("training").resolve("outputs"),
-                workingRoot.resolve("server5").resolve("runtime").resolve("training").resolve("outputs"),
-                workingRoot.resolve("ai-training-service").resolve("runtime").resolve("training").resolve("outputs"),
-                workingRoot.resolve("server5").resolve("ai-training-service").resolve("runtime").resolve("training").resolve("outputs"),
-                workingRoot.resolve("ai-training-service").resolve("models").resolve("outputs"),
-                workingRoot.resolve("server5").resolve("ai-training-service").resolve("models").resolve("outputs")
-        );
-
-        for (Path dir : candidateDirs) {
-            Path candidate = dir.resolve(fileName).normalize();
-            if (Files.exists(candidate)) {
-                return candidate;
-            }
-        }
-        return null;
-    }
-
-    private String buildTargetFileName(String versionName, String sourceFileName) {
-        String extension = ".pt";
-        int dotIndex = sourceFileName.lastIndexOf('.');
-        if (dotIndex >= 0 && dotIndex < sourceFileName.length() - 1) {
-            extension = sourceFileName.substring(dotIndex);
-        }
-
-        String safeBase = versionName == null ? "version" : versionName.replaceAll("[^a-zA-Z0-9._-]", "_");
-        if (safeBase.isBlank()) {
-            safeBase = "version";
-        }
-        if (safeBase.length() > 80) {
-            safeBase = safeBase.substring(0, 80);
-        }
-
-        return safeBase + extension;
-    }
-
-    private String normalizeAimodelPublicPath(int moHinhId, String fileName) {
-        String prefix = aimodelModelPublicPrefix.endsWith("/")
-                ? aimodelModelPublicPrefix.substring(0, aimodelModelPublicPrefix.length() - 1)
-                : aimodelModelPublicPrefix;
-        return prefix + "/mo-hinh-" + moHinhId + "/" + fileName;
-    }
-
-    private void copyToAimodelStore(Path source, Path destination) {
-        try {
-            Files.createDirectories(destination.getParent());
-            Files.copy(source, destination, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException ex) {
-            throw new IllegalStateException("Could not copy temporary model artifact to aimodel-service storage", ex);
-        }
-    }
-
-    private void deleteTempArtifact(Path tempModelPath) {
-        try {
-            Files.deleteIfExists(tempModelPath);
-        } catch (IOException ex) {
-            throw new IllegalStateException("Saved version but could not delete temporary model artifact: " + tempModelPath, ex);
-        }
-    }
-
-    private void deleteIfExistsQuietly(Path path) {
-        try {
-            Files.deleteIfExists(path);
-        } catch (IOException ignored) {
-            // Best-effort cleanup only.
-        }
-    }
-
-    private Path resolvePath(String raw) {
-        Path path = Path.of(raw);
-        if (path.isAbsolute()) {
-            return path.normalize();
-        }
-
-        Path direct = workingRoot.resolve(path).normalize();
-        Path moduleRelative = workingRoot.resolve("training-orchestrator-service").resolve(path).normalize();
-        Path server5Direct = workingRoot.resolve("server5").resolve(path).normalize();
-        Path server5ModuleRelative = workingRoot.resolve("server5")
-                .resolve("training-orchestrator-service")
-                .resolve(path)
-                .normalize();
-
-        if (Files.exists(direct)) {
-            return direct;
-        }
-        if (Files.exists(moduleRelative)) {
-            return moduleRelative;
-        }
-        if (Files.exists(server5Direct)) {
-            return server5Direct;
-        }
-        if (Files.exists(server5ModuleRelative)) {
-            return server5ModuleRelative;
-        }
-        return direct;
-    }
-
-    private Path toAbsolutePath(String raw) {
-        try {
-            Path path = Path.of(raw);
-            return path.isAbsolute() ? path.normalize() : null;
-        } catch (Exception ex) {
-            return null;
-        }
-    }
-
-    private String extractFileName(String input) {
-        int slash = input.lastIndexOf('/');
-        return slash >= 0 ? input.substring(slash + 1) : input;
-    }
 }
-
